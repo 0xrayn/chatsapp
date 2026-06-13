@@ -52,21 +52,22 @@ func main() {
 	roomRepo := repository.NewRoomRepository(db)
 	msgRepo := repository.NewMessageRepository(db)
 
+	// WebSocket Hub
+	hub := ws.NewHub()
+	go hub.Run()
+
 	// Services
 	authService := service.NewAuthService(userRepo)
 	roomService := service.NewRoomService(roomRepo)
 	msgService := service.NewMessageService(msgRepo, roomRepo)
-	dmService := service.NewDMService(roomRepo, userRepo)
-
-	// WebSocket Hub
-	hub := ws.NewHub()
-	go hub.Run()
+	dmService := service.NewDMService(roomRepo, userRepo, msgRepo, hub)
 
 	// Handlers
 	authHandler := handler.NewAuthHandler(authService)
 	roomHandler := handler.NewRoomHandler(roomService)
 	msgHandler := handler.NewMessageHandler(msgService)
-	dmHandler := handler.NewDMHandler(dmService)
+	dmHandler := handler.NewDMHandler(dmService, hub)
+	uploadHandler := handler.NewUploadHandler()
 	wsHandler := ws.NewHandler(hub, msgRepo, roomRepo, userRepo)
 
 	// Rate limiters
@@ -75,13 +76,14 @@ func main() {
 
 	// Setup router
 	r := router.SetupRoutes(router.Config{
-		AuthHandler: authHandler,
-		RoomHandler: roomHandler,
-		MsgHandler:  msgHandler,
-		DMHandler:   dmHandler,
-		WSHandler:   wsHandler,
-		APILimiter:  apiLimiter,
-		AuthLimiter: authLimiter,
+		AuthHandler:   authHandler,
+		RoomHandler:   roomHandler,
+		MsgHandler:    msgHandler,
+		DMHandler:     dmHandler,
+		UploadHandler: uploadHandler,
+		WSHandler:     wsHandler,
+		APILimiter:    apiLimiter,
+		AuthLimiter:   authLimiter,
 	})
 
 	port := os.Getenv("PORT")

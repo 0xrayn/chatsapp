@@ -6,6 +6,7 @@ import (
 
 	"chatapp/internal/domain"
 	"chatapp/internal/service"
+	ws "chatapp/internal/websocket"
 	"chatapp/test/mock"
 
 	"github.com/google/uuid"
@@ -17,7 +18,8 @@ func TestDMService_GetOrCreateDM(t *testing.T) {
 	t.Run("rejects DM with self", func(t *testing.T) {
 		roomRepo := new(mock.RoomRepository)
 		userRepo := new(mock.UserRepository)
-		svc := service.NewDMService(roomRepo, userRepo)
+		msgRepo := new(mock.MessageRepository)
+		svc := service.NewDMService(roomRepo, userRepo, msgRepo, ws.NewHub())
 
 		userID := uuid.New()
 
@@ -29,7 +31,8 @@ func TestDMService_GetOrCreateDM(t *testing.T) {
 	t.Run("returns existing DM room", func(t *testing.T) {
 		roomRepo := new(mock.RoomRepository)
 		userRepo := new(mock.UserRepository)
-		svc := service.NewDMService(roomRepo, userRepo)
+		msgRepo := new(mock.MessageRepository)
+		svc := service.NewDMService(roomRepo, userRepo, msgRepo, ws.NewHub())
 
 		senderID := uuid.New()
 		recipientID := uuid.New()
@@ -51,7 +54,8 @@ func TestDMService_GetOrCreateDM(t *testing.T) {
 	t.Run("creates new DM room when none exists", func(t *testing.T) {
 		roomRepo := new(mock.RoomRepository)
 		userRepo := new(mock.UserRepository)
-		svc := service.NewDMService(roomRepo, userRepo)
+		msgRepo := new(mock.MessageRepository)
+		svc := service.NewDMService(roomRepo, userRepo, msgRepo, ws.NewHub())
 
 		senderID := uuid.New()
 		recipientID := uuid.New()
@@ -78,7 +82,8 @@ func TestDMService_GetOrCreateDM(t *testing.T) {
 	t.Run("recipient not found", func(t *testing.T) {
 		roomRepo := new(mock.RoomRepository)
 		userRepo := new(mock.UserRepository)
-		svc := service.NewDMService(roomRepo, userRepo)
+		msgRepo := new(mock.MessageRepository)
+		svc := service.NewDMService(roomRepo, userRepo, msgRepo, ws.NewHub())
 
 		senderID := uuid.New()
 		recipientID := uuid.New()

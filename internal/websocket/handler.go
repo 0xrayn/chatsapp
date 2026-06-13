@@ -31,6 +31,10 @@ type ChatPayload struct {
 	RoomID    string `json:"room_id"`
 	Content   string `json:"content"`
 	ReplyToID string `json:"reply_to_id,omitempty"`
+	Type      string `json:"type,omitempty"`
+	FileURL   string `json:"file_url,omitempty"`
+	FileName  string `json:"file_name,omitempty"`
+	FileSize  int64  `json:"file_size,omitempty"`
 }
 
 type TypingPayload struct {
@@ -211,9 +215,26 @@ func (h *Handler) handleSendMessage(client *Client, payload json.RawMessage) {
 		return
 	}
 
-	if p.Content == "" || len(p.Content) > 2000 {
-		client.SendEvent(string(domain.EventError), gin.H{"error": "Message content must be 1-2000 characters"})
-		return
+	msgType := domain.MessageTypeText
+	if p.Type == string(domain.MessageTypeImage) || p.Type == string(domain.MessageTypeFile) {
+		msgType = domain.MessageType(p.Type)
+	}
+
+	// Text messages require content; file/image messages require a file URL
+	if msgType == domain.MessageTypeText {
+		if p.Content == "" || len(p.Content) > 2000 {
+			client.SendEvent(string(domain.EventError), gin.H{"error": "Message content must be 1-2000 characters"})
+			return
+		}
+	} else {
+		if p.FileURL == "" {
+			client.SendEvent(string(domain.EventError), gin.H{"error": "file_url is required for file/image messages"})
+			return
+		}
+		if len(p.Content) > 2000 {
+			client.SendEvent(string(domain.EventError), gin.H{"error": "Caption must be at most 2000 characters"})
+			return
+		}
 	}
 
 	roomID, err := uuid.Parse(p.RoomID)
@@ -234,7 +255,10 @@ func (h *Handler) handleSendMessage(client *Client, payload json.RawMessage) {
 		RoomID:   roomID,
 		SenderID: client.UserID,
 		Content:  p.Content,
-		Type:     domain.MessageTypeText,
+		Type:     msgType,
+		FileURL:  p.FileURL,
+		FileName: p.FileName,
+		FileSize: p.FileSize,
 	}
 
 	if p.ReplyToID != "" {
@@ -248,6 +272,8 @@ func (h *Handler) handleSendMessage(client *Client, payload json.RawMessage) {
 		client.SendEvent(string(domain.EventError), gin.H{"error": "Failed to save message"})
 		return
 	}
+
+	go h.roomRepo.TouchLastMessageAt(roomID)
 
 	// Load sender info
 	savedMsg, _ := h.msgRepo.FindByID(message.ID)

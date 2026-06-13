@@ -75,6 +75,23 @@ func (h *AuthHandler) SearchUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": users})
 }
 
+// PATCH /api/v1/auth/me — update avatar and/or status
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	var req domain.UpdateProfileRequest
+	if !middleware.BindJSONOrError(c, &req) {
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	user, err := h.authService.UpdateProfile(userID, req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
 // ---- Room Handler ----
 
 type RoomHandler struct {

@@ -12,6 +12,7 @@ type User struct {
 	Email     string     `json:"email" gorm:"uniqueIndex;not null"`
 	Password  string     `json:"-" gorm:"not null"`
 	Avatar    string     `json:"avatar"`
+	Status    string     `json:"status" gorm:"default:'Hey there! I am using ChatApp'"`
 	IsOnline  bool       `json:"is_online" gorm:"default:false"`
 	LastSeen  time.Time  `json:"last_seen"`
 	CreatedAt time.Time  `json:"created_at"`
@@ -19,16 +20,17 @@ type User struct {
 }
 
 type Room struct {
-	ID          uuid.UUID     `json:"id" gorm:"type:uuid;primary_key"`
-	Name        string        `json:"name" gorm:"not null"`
-	Description string        `json:"description"`
-	Type        RoomType      `json:"type" gorm:"default:'public'"`
-	CreatedBy   uuid.UUID     `json:"created_by" gorm:"type:uuid"`
-	Creator     User          `json:"creator,omitempty" gorm:"foreignKey:CreatedBy"`
-	Members     []RoomMember  `json:"members,omitempty"`
-	Messages    []Message     `json:"messages,omitempty"`
-	CreatedAt   time.Time     `json:"created_at"`
-	UpdatedAt   time.Time     `json:"updated_at"`
+	ID             uuid.UUID    `json:"id" gorm:"type:uuid;primary_key"`
+	Name           string       `json:"name" gorm:"not null"`
+	Description    string       `json:"description"`
+	Type           RoomType     `json:"type" gorm:"default:'public'"`
+	CreatedBy      uuid.UUID    `json:"created_by" gorm:"type:uuid"`
+	Creator        User         `json:"creator,omitempty" gorm:"foreignKey:CreatedBy"`
+	Members        []RoomMember `json:"members,omitempty"`
+	Messages       []Message    `json:"messages,omitempty"`
+	LastMessageAt  *time.Time   `json:"last_message_at,omitempty"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
 }
 
 type RoomType string
@@ -40,12 +42,13 @@ const (
 )
 
 type RoomMember struct {
-	ID       uuid.UUID `json:"id" gorm:"type:uuid;primary_key"`
-	RoomID   uuid.UUID `json:"room_id" gorm:"type:uuid;not null"`
-	UserID   uuid.UUID `json:"user_id" gorm:"type:uuid;not null"`
-	User     User      `json:"user,omitempty" gorm:"foreignKey:UserID"`
+	ID       uuid.UUID  `json:"id" gorm:"type:uuid;primary_key"`
+	RoomID   uuid.UUID  `json:"room_id" gorm:"type:uuid;not null"`
+	UserID   uuid.UUID  `json:"user_id" gorm:"type:uuid;not null"`
+	User     User       `json:"user,omitempty" gorm:"foreignKey:UserID"`
 	Role     MemberRole `json:"role" gorm:"default:'member'"`
-	JoinedAt time.Time `json:"joined_at"`
+	ReadAt   *time.Time `json:"read_at,omitempty"`
+	JoinedAt time.Time  `json:"joined_at"`
 }
 
 type MemberRole string
@@ -62,6 +65,9 @@ type Message struct {
 	Sender     User        `json:"sender,omitempty" gorm:"foreignKey:SenderID"`
 	Content    string      `json:"content" gorm:"not null"`
 	Type       MessageType `json:"type" gorm:"default:'text'"`
+	FileURL    string      `json:"file_url,omitempty"`
+	FileName   string      `json:"file_name,omitempty"`
+	FileSize   int64       `json:"file_size,omitempty"`
 	IsEdited   bool        `json:"is_edited" gorm:"default:false"`
 	IsDeleted  bool        `json:"is_deleted" gorm:"default:false"`
 	ReplyToID  *uuid.UUID  `json:"reply_to_id,omitempty" gorm:"type:uuid"`
@@ -98,6 +104,8 @@ const (
 	EventTyping         WSEventType = "typing"
 	EventStopTyping     WSEventType = "stop_typing"
 	EventError          WSEventType = "error"
+	EventDMCreated      WSEventType = "dm_created"
+	EventMessagesRead   WSEventType = "messages_read"
 )
 
 type TypingEvent struct {
@@ -130,9 +138,17 @@ type CreateRoomRequest struct {
 }
 
 type SendMessageRequest struct {
-	Content   string     `json:"content" binding:"required"`
+	Content   string      `json:"content"`
 	Type      MessageType `json:"type"`
-	ReplyToID *string    `json:"reply_to_id,omitempty"`
+	ReplyToID *string     `json:"reply_to_id,omitempty"`
+	FileURL   string      `json:"file_url,omitempty"`
+	FileName  string      `json:"file_name,omitempty"`
+	FileSize  int64       `json:"file_size,omitempty"`
+}
+
+type UpdateProfileRequest struct {
+	Status string `json:"status,omitempty"`
+	Avatar string `json:"avatar,omitempty"`
 }
 
 type EditMessageRequest struct {
@@ -152,10 +168,17 @@ type PaginatedResponse struct {
 	TotalPages int         `json:"total_pages"`
 }
 
-// DMRoom wraps a direct-message Room with the other participant's info
+// DMRoom wraps a direct-message Room with the other participant's info,
+// plus the last message preview and unread count for the requesting user.
 type DMRoom struct {
-	Room      Room `json:"room"`
-	OtherUser User `json:"other_user"`
+	Room        Room      `json:"room"`
+	OtherUser   User      `json:"other_user"`
+	LastMessage *Message  `json:"last_message,omitempty"`
+	UnreadCount int64     `json:"unread_count"`
+}
+
+type MarkReadRequest struct {
+	RoomID string `json:"room_id"`
 }
 
 type CreateDMRequest struct {

@@ -99,3 +99,24 @@ func (s *AuthService) SearchUsers(query string, excludeID uuid.UUID) ([]domain.U
 	}
 	return s.userRepo.SearchUsers(query, excludeID, 20)
 }
+
+// UpdateProfile updates the user's avatar and/or status message
+func (s *AuthService) UpdateProfile(userID uuid.UUID, req domain.UpdateProfileRequest) (*domain.User, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	if req.Avatar != "" {
+		user.Avatar = req.Avatar
+	}
+	if req.Status != "" {
+		user.Status = req.Status
+	}
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("failed to update profile")
+	}
+
+	return user, nil
+}

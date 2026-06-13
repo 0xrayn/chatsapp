@@ -1,6 +1,8 @@
 package mock
 
 import (
+	"time"
+
 	"chatapp/internal/domain"
 
 	"github.com/google/uuid"
@@ -134,6 +136,24 @@ func (m *RoomRepository) FindDirectRoomsByUserID(userID uuid.UUID) ([]domain.Roo
 	return args.Get(0).([]domain.Room), args.Error(1)
 }
 
+func (m *RoomRepository) MarkAsRead(roomID, userID uuid.UUID) error {
+	args := m.Called(roomID, userID)
+	return args.Error(0)
+}
+
+func (m *RoomRepository) GetReadAt(roomID, userID uuid.UUID) (*time.Time, error) {
+	args := m.Called(roomID, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*time.Time), args.Error(1)
+}
+
+func (m *RoomRepository) TouchLastMessageAt(roomID uuid.UUID) error {
+	args := m.Called(roomID)
+	return args.Error(0)
+}
+
 // ---- MessageRepository Mock ----
 
 type MessageRepository struct {
@@ -166,4 +186,17 @@ func (m *MessageRepository) Update(message *domain.Message) error {
 func (m *MessageRepository) SoftDelete(id uuid.UUID) error {
 	args := m.Called(id)
 	return args.Error(0)
+}
+
+func (m *MessageRepository) GetLastMessage(roomID uuid.UUID) (*domain.Message, error) {
+	args := m.Called(roomID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Message), args.Error(1)
+}
+
+func (m *MessageRepository) CountUnread(roomID, userID uuid.UUID, since *time.Time) (int64, error) {
+	args := m.Called(roomID, userID, since)
+	return args.Get(0).(int64), args.Error(1)
 }

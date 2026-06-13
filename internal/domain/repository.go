@@ -1,6 +1,10 @@
 package domain
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type UserRepository interface {
 	Create(user *User) error
@@ -26,6 +30,9 @@ type RoomRepository interface {
 	GetMembers(roomID uuid.UUID) ([]RoomMember, error)
 	FindDirectRoom(userAID, userBID uuid.UUID) (*Room, error)
 	FindDirectRoomsByUserID(userID uuid.UUID) ([]Room, error)
+	MarkAsRead(roomID, userID uuid.UUID) error
+	GetReadAt(roomID, userID uuid.UUID) (*time.Time, error)
+	TouchLastMessageAt(roomID uuid.UUID) error
 }
 
 type MessageRepository interface {
@@ -34,4 +41,6 @@ type MessageRepository interface {
 	FindByRoomID(roomID uuid.UUID, page, limit int) ([]Message, int64, error)
 	Update(message *Message) error
 	SoftDelete(id uuid.UUID) error
+	GetLastMessage(roomID uuid.UUID) (*Message, error)
+	CountUnread(roomID, userID uuid.UUID, since *time.Time) (int64, error)
 }

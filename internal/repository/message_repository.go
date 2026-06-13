@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"chatapp/internal/domain"
 
 	"github.com/google/uuid"
@@ -70,4 +72,30 @@ func (r *messageRepository) SoftDelete(id uuid.UUID) error {
 			"is_deleted": true,
 			"content":    "This message has been deleted",
 		}).Error
+}
+
+func (r *messageRepository) GetLastMessage(roomID uuid.UUID) (*domain.Message, error) {
+	var message domain.Message
+	err := r.db.
+		Preload("Sender").
+		Where("room_id = ? AND is_deleted = ?", roomID, false).
+		Order("created_at DESC").
+		First(&message).Error
+	if err != nil {
+		return nil, err
+	}
+	return &message, nil
+}
+
+func (r *messageRepository) CountUnread(roomID, userID uuid.UUID, since *time.Time) (int64, error) {
+	var count int64
+	q := r.db.Model(&domain.Message{}).
+		Where("room_id = ? AND is_deleted = ? AND sender_id != ?", roomID, false, userID)
+
+	if since != nil {
+		q = q.Where("created_at > ?", *since)
+	}
+
+	err := q.Count(&count).Error
+	return count, err
 }

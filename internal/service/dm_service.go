@@ -3,9 +3,11 @@ package service
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"chatapp/internal/domain"
+	ws "chatapp/internal/websocket"
 
 	"github.com/google/uuid"
 )
@@ -13,10 +15,34 @@ import (
 type DMService struct {
 	roomRepo domain.RoomRepository
 	userRepo domain.UserRepository
+	msgRepo  domain.MessageRepository
+	hub      *ws.Hub
 }
 
-func NewDMService(roomRepo domain.RoomRepository, userRepo domain.UserRepository) *DMService {
-	return &DMService{roomRepo: roomRepo, userRepo: userRepo}
+func NewDMService(roomRepo domain.RoomRepository, userRepo domain.UserRepository, msgRepo domain.MessageRepository, hub *ws.Hub) *DMService {
+	return &DMService{roomRepo: roomRepo, userRepo: userRepo, msgRepo: msgRepo, hub: hub}
+}
+
+// GetRoomMemberIDs returns the user IDs of all members in a room
+func (s *DMService) GetRoomMemberIDs(roomID uuid.UUID) ([]uuid.UUID, error) {
+	members, err := s.roomRepo.GetMembers(roomID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]uuid.UUID, 0, len(members))
+	for _, m := range members {
+		ids = append(ids, m.UserID)
+	}
+	return ids, nil
+}
+
+// HasDirectRoom checks if a DM room already exists between the two users
+func (s *DMService) HasDirectRoom(userAID, userBID uuid.UUID) (bool, error) {
+	room, err := s.roomRepo.FindDirectRoom(userAID, userBID)
+	if err != nil || room == nil {
+		return false, nil
+	}
+	return true, nil
 }
 
 // GetOrCreateDM returns existing DM room or creates a new one
@@ -83,7 +109,8 @@ func (s *DMService) GetOrCreateDM(senderID, recipientID uuid.UUID) (*domain.Room
 	return s.roomRepo.FindByID(room.ID)
 }
 
-// GetDMRooms returns all DM rooms for a user
+// GetDMRooms returns all DM rooms for a user, enriched with last message,
+// unread count, sorted by most recent activity first.
 func (s *DMService) GetDMRooms(userID uuid.UUID) ([]domain.DMRoom, error) {
 	rooms, err := s.roomRepo.FindDirectRoomsByUserID(userID)
 	if err != nil {
@@ -104,11 +131,54 @@ func (s *DMService) GetDMRooms(userID uuid.UUID) ([]domain.DMRoom, error) {
 			continue
 		}
 
-		dmRooms = append(dmRooms, domain.DMRoom{
+		dm := domain.DMRoom{
 			Room:      room,
 			OtherUser: *otherUser,
-		})
+		}
+
+		// Use live WebSocket connection status rather than the (possibly stale) DB flag
+		dm.OtherUser.IsOnline = s.hub.IsUserOnline(otherUser.ID)
+
+		// Last message preview
+		if lastMsg, err := s.msgRepo.GetLastMessage(room.ID); err == nil {
+			dm.LastMessage = lastMsg
+		} else {
+			// Skip empty conversations (no messages yet) from the sidebar list —
+			// they still exist so the user can open and start chatting,
+			// but shouldn't clutter the list until there's an actual message.
+			continue
+		}
+
+		// Unread count: messages sent by the other user after this user's last read time
+		readAt, _ := s.roomRepo.GetReadAt(room.ID, userID)
+		if count, err := s.msgRepo.CountUnread(room.ID, userID, readAt); err == nil {
+			dm.UnreadCount = count
+		}
+
+		dmRooms = append(dmRooms, dm)
 	}
 
+	// Sort by last message time (most recent first), fallback to room.UpdatedAt
+	sort.Slice(dmRooms, func(i, j int) bool {
+		ti := dmRooms[i].Room.UpdatedAt
+		if dmRooms[i].LastMessage != nil {
+			ti = dmRooms[i].LastMessage.CreatedAt
+		}
+		tj := dmRooms[j].Room.UpdatedAt
+		if dmRooms[j].LastMessage != nil {
+			tj = dmRooms[j].LastMessage.CreatedAt
+		}
+		return ti.After(tj)
+	})
+
 	return dmRooms, nil
+}
+
+// MarkAsRead marks all messages in a room as read for this user
+func (s *DMService) MarkAsRead(roomID, userID uuid.UUID) error {
+	isMember, _ := s.roomRepo.IsMember(roomID, userID)
+	if !isMember {
+		return errors.New("not a member of this room")
+	}
+	return s.roomRepo.MarkAsRead(roomID, userID)
 }

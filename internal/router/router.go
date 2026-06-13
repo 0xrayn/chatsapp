@@ -15,6 +15,7 @@ type Config struct {
 	RoomHandler    *handler.RoomHandler
 	MsgHandler     *handler.MessageHandler
 	DMHandler      *handler.DMHandler
+	UploadHandler  *handler.UploadHandler
 	WSHandler      *ws.Handler
 	APILimiter     *middleware.RateLimiter
 	AuthLimiter    *middleware.RateLimiter
@@ -65,7 +66,9 @@ func SetupRoutes(cfg Config) *gin.Engine {
 	protected.Use(cfg.APILimiter.Middleware())
 	{
 		protected.GET("/auth/me", cfg.AuthHandler.GetProfile)
+		protected.PATCH("/auth/me", cfg.AuthHandler.UpdateProfile)
 		protected.GET("/users/search", cfg.AuthHandler.SearchUsers)
+		protected.POST("/upload", cfg.UploadHandler.Upload)
 
 		// Rooms
 		rooms := protected.Group("/rooms")
@@ -78,6 +81,7 @@ func SetupRoutes(cfg Config) *gin.Engine {
 			rooms.POST("/:id/join", cfg.RoomHandler.JoinRoom)
 			rooms.POST("/:id/leave", cfg.RoomHandler.LeaveRoom)
 			rooms.GET("/:id/messages", cfg.MsgHandler.GetMessages)
+			rooms.POST("/:id/read", cfg.DMHandler.MarkAsRead)
 		}
 
 		// Direct Messages

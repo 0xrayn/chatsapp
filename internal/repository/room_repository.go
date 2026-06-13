@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"chatapp/internal/domain"
 
 	"github.com/google/uuid"
@@ -120,4 +122,30 @@ func (r *roomRepository) FindDirectRoomsByUserID(userID uuid.UUID) ([]domain.Roo
 		Order("rooms.updated_at DESC").
 		Find(&rooms).Error
 	return rooms, err
+}
+
+func (r *roomRepository) MarkAsRead(roomID, userID uuid.UUID) error {
+	return r.db.Model(&domain.RoomMember{}).
+		Where("room_id = ? AND user_id = ?", roomID, userID).
+		Update("read_at", gorm.Expr("NOW()")).Error
+}
+
+func (r *roomRepository) GetReadAt(roomID, userID uuid.UUID) (*time.Time, error) {
+	var member domain.RoomMember
+	err := r.db.
+		Where("room_id = ? AND user_id = ?", roomID, userID).
+		First(&member).Error
+	if err != nil {
+		return nil, err
+	}
+	return member.ReadAt, nil
+}
+
+func (r *roomRepository) TouchLastMessageAt(roomID uuid.UUID) error {
+	return r.db.Model(&domain.Room{}).
+		Where("id = ?", roomID).
+		Updates(map[string]interface{}{
+			"last_message_at": gorm.Expr("NOW()"),
+			"updated_at":       gorm.Expr("NOW()"),
+		}).Error
 }

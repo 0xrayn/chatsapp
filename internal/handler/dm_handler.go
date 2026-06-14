@@ -46,6 +46,8 @@ func (h *DMHandler) GetOrCreateDM(c *gin.Context) {
 
 	// Notify the recipient in real-time if this is a brand-new conversation
 	if !wasExisting {
+		h.hub.JoinRoomForUser(senderID, room.ID)
+		h.hub.JoinRoomForUser(recipientID, room.ID)
 		h.notifyDMCreated(recipientID, senderID, room)
 	}
 

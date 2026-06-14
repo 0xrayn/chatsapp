@@ -23,6 +23,25 @@ func NewDMService(roomRepo domain.RoomRepository, userRepo domain.UserRepository
 	return &DMService{roomRepo: roomRepo, userRepo: userRepo, msgRepo: msgRepo, hub: hub}
 }
 
+// GetAllDMPartnerIDs returns the user IDs of everyone this user has a DM room with,
+// regardless of whether any messages have been exchanged yet.
+func (s *DMService) GetAllDMPartnerIDs(userID uuid.UUID) ([]uuid.UUID, error) {
+	rooms, err := s.roomRepo.FindDirectRoomsByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uuid.UUID, 0, len(rooms))
+	for _, room := range rooms {
+		for _, m := range room.Members {
+			if m.UserID != userID {
+				ids = append(ids, m.UserID)
+			}
+		}
+	}
+	return ids, nil
+}
+
 // GetRoomMemberIDs returns the user IDs of all members in a room
 func (s *DMService) GetRoomMemberIDs(roomID uuid.UUID) ([]uuid.UUID, error) {
 	members, err := s.roomRepo.GetMembers(roomID)

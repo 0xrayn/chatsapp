@@ -83,6 +83,14 @@ func (h *Handler) HandleWS(c *gin.Context) {
 
 	h.hub.Register <- client
 
+	// Auto-join every room this user belongs to, so message broadcasts
+	// reach them even if they haven't explicitly opened that conversation.
+	if rooms, err := h.roomRepo.FindByUserID(userID); err == nil {
+		for _, room := range rooms {
+			h.hub.JoinRoom(client.ID, room.ID)
+		}
+	}
+
 	// Update online status
 	go h.userRepo.SetOnlineStatus(userID, true)
 

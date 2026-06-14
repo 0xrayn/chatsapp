@@ -115,6 +115,25 @@ func (h *Hub) JoinRoom(clientID, roomID uuid.UUID) {
 	client.Rooms[roomID] = true
 }
 
+// JoinRoomForUser joins the room on behalf of a user's current connection,
+// if they have one. Useful when a new room (e.g. a DM) is created and the
+// other participant is already connected but hasn't explicitly joined yet.
+func (h *Hub) JoinRoomForUser(userID, roomID uuid.UUID) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	client, ok := h.userConn[userID]
+	if !ok {
+		return
+	}
+
+	if _, ok := h.roomUsers[roomID]; !ok {
+		h.roomUsers[roomID] = make(map[uuid.UUID]bool)
+	}
+	h.roomUsers[roomID][client.ID] = true
+	client.Rooms[roomID] = true
+}
+
 func (h *Hub) LeaveRoom(clientID, roomID uuid.UUID) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

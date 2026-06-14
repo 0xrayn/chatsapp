@@ -106,6 +106,7 @@ const (
 	EventError          WSEventType = "error"
 	EventDMCreated      WSEventType = "dm_created"
 	EventMessagesRead   WSEventType = "messages_read"
+	EventProfileUpdated WSEventType = "profile_updated"
 )
 
 type TypingEvent struct {

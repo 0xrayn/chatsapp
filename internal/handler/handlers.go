@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"chatapp/internal/domain"
 	"chatapp/internal/middleware"
 	"chatapp/internal/service"
+	ws "chatapp/internal/websocket"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -14,10 +16,12 @@ import (
 
 type AuthHandler struct {
 	authService *service.AuthService
+	dmService   *service.DMService
+	hub         *ws.Hub
 }
 
-func NewAuthHandler(authService *service.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService *service.AuthService, dmService *service.DMService, hub *ws.Hub) *AuthHandler {
+	return &AuthHandler{authService: authService, dmService: dmService, hub: hub}
 }
 
 func (h *AuthHandler) Register(c *gin.Context) {
@@ -75,6 +79,23 @@ func (h *AuthHandler) SearchUsers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": users})
 }
 
+// GET /api/v1/users/:id — view another user's public profile
+func (h *AuthHandler) GetUserByID(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	user, err := h.authService.GetProfile(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
 // PATCH /api/v1/auth/me — update avatar and/or status
 func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	var req domain.UpdateProfileRequest
@@ -89,7 +110,29 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
+	// Notify DM partners in real-time so their sidebar/profile reflects the change
+	go h.notifyProfileUpdated(user)
+
 	c.JSON(http.StatusOK, user)
+}
+
+func (h *AuthHandler) notifyProfileUpdated(user *domain.User) {
+	partnerIDs, err := h.dmService.GetAllDMPartnerIDs(user.ID)
+	if err != nil {
+		return
+	}
+
+	data, err := json.Marshal(map[string]interface{}{
+		"type":    string(domain.EventProfileUpdated),
+		"payload": user,
+	})
+	if err != nil {
+		return
+	}
+
+	for _, partnerID := range partnerIDs {
+		h.hub.SendToUser(partnerID, data)
+	}
 }
 
 // ---- Room Handler ----

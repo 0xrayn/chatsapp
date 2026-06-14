@@ -73,6 +73,7 @@
     font-weight: 700; font-size: 15px; color: var(--accent-contrast); flex-shrink: 0; overflow: hidden;
   }
   .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .avatar-fallback { display: none; width: 100%; height: 100%; align-items: center; justify-content: center; }
   .avatar.small { width: 32px; height: 32px; font-size: 13px; }
   .avatar.large { width: 84px; height: 84px; font-size: 32px; }
   .me-name { font-weight: 600; font-size: 15px; }
@@ -115,12 +116,12 @@
   #chatPanel { display: none; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
   #chatPanel.visible { display: flex; }
 
-  .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 8% 8px; display: flex; flex-direction: column; gap: 2px; background: var(--chat-bg); }
+  .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 8% 8px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; background: var(--chat-bg); }
   .msg-row { display: flex; flex-shrink: 0; background: transparent; padding: 2px 0; animation: msgIn .18s ease; }
   .msg-row.me { justify-content: flex-end; }
   .msg {
-    max-width: 65%; padding: 8px 12px; border-radius: 12px; background: var(--bubble-other);
-    font-size: 14.5px; line-height: 1.4; position: relative; word-wrap: break-word;
+    max-width: 65%; width: fit-content; padding: 8px 12px; border-radius: 12px; background: var(--bubble-other);
+    font-size: 14.5px; line-height: 1.4; position: relative; word-wrap: break-word; word-break: break-word;
     box-shadow: 0 1px 2px rgba(0,0,0,0.08); transition: filter .1s;
   }
   .msg.me { background: var(--bubble-me); }
@@ -241,9 +242,11 @@
   .lightbox-overlay.visible { display: flex; animation: fadeIn .15s ease; }
   .lightbox-close { position: absolute; top: 16px; right: 20px; color: #fff; font-size: 28px; cursor: pointer; z-index: 10; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background .12s; }
   .lightbox-close:hover { background: rgba(255,255,255,0.15); }
-  .lightbox-img { max-width: 95vw; max-height: 90vh; object-fit: contain; cursor: zoom-in; transition: transform .2s ease; touch-action: pinch-zoom; }
-  .lightbox-img.zoomed { transform: scale(1.8); cursor: zoom-out; }
-  .lightbox-hint { color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 12px; }
+  .lightbox-viewport { width: 95vw; height: 85vh; overflow: auto; display: flex; align-items: center; justify-content: center; }
+  .lightbox-viewport.zoomed { align-items: flex-start; justify-content: flex-start; }
+  .lightbox-img { max-width: 95vw; max-height: 85vh; object-fit: contain; cursor: zoom-in; transition: max-width .2s ease, max-height .2s ease; display: block; }
+  .lightbox-img.zoomed { max-width: none; max-height: none; width: 180vw; cursor: zoom-out; }
+  .lightbox-hint { color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 12px; flex-shrink: 0; }
 
   .doc-modal { background: var(--panel); border-radius: 12px; width: min(800px, 94vw); height: min(85vh, 900px); display: flex; flex-direction: column; position: relative; overflow: hidden; }
   .doc-modal-header { padding: 14px 50px 14px 16px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -370,8 +373,10 @@
 <!-- LIGHTBOX (image viewer) -->
 <div class="lightbox-overlay" id="lightboxOverlay">
   <span class="lightbox-close" id="lightboxClose">✕</span>
-  <img class="lightbox-img" id="lightboxImg" src="" alt="" />
-  <div class="lightbox-hint">Click image to zoom · Click outside to close</div>
+  <div class="lightbox-viewport" id="lightboxViewport">
+    <img class="lightbox-img" id="lightboxImg" src="" alt="" />
+  </div>
+  <div class="lightbox-hint">Click image to zoom &amp; scroll to pan · Click outside to close</div>
 </div>
 
 <!-- DOCUMENT VIEWER -->
@@ -385,7 +390,7 @@
 
 <!-- MAIN APP -->
 <div id="app">
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="me" id="meBtn">
         <div class="avatar" id="myAvatar">?</div>
@@ -454,6 +459,53 @@ let conversations = [];
 let pendingAttachment = null;
 
 const $ = id => document.getElementById(id);
+
+// ---- SOUND EFFECTS (synthesized via Web Audio API, no asset files needed) ----
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) audioCtx = new AC();
+  }
+  // Browsers suspend AudioContext until a user gesture; resume if needed
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playTone(freq, duration, volume, type) {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.value = freq;
+  gain.gain.value = volume;
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + duration);
+}
+
+// Soft "tick" sound for each keystroke while typing
+function playTypingSound() {
+  playTone(700 + Math.random() * 150, 0.04, 0.03, 'square');
+}
+
+// Two-tone "pop" for incoming messages
+function playMessageReceivedSound() {
+  playTone(880, 0.09, 0.08, 'sine');
+  setTimeout(() => playTone(1100, 0.12, 0.07, 'sine'), 80);
+}
+
+// Single soft tone for sent messages
+function playMessageSentSound() {
+  playTone(600, 0.07, 0.05, 'sine');
+}
+
+// Unlock audio on first user interaction (required by browser autoplay policies)
+document.addEventListener('click', () => getAudioCtx(), { once: true });
+document.addEventListener('keydown', () => getAudioCtx(), { once: true });
 
 // ---- THEME & APPEARANCE ----
 const CHAT_BG_PRESETS = {
@@ -559,11 +611,19 @@ function updateMyProfileUI() {
 }
 
 function setAvatarEl(el, user) {
+  el.innerHTML = avatarInnerHtml(user);
+}
+
+// Returns inner HTML for an avatar element: an <img> if the user has one,
+// with an onerror fallback to the username's initial letter if the image
+// fails to load (broken/missing avatar URL), or the initial directly.
+function avatarInnerHtml(user) {
+  const initial = (user && user.username) ? escapeHtml(user.username[0].toUpperCase()) : '?';
   if (user && user.avatar) {
-    el.innerHTML = `<img src="${escapeHtml(resolveUrl(user.avatar))}" alt="" />`;
-  } else {
-    el.textContent = (user && user.username) ? user.username[0].toUpperCase() : '?';
+    const url = escapeHtml(resolveUrl(user.avatar));
+    return `<img src="${url}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><span class="avatar-fallback">${initial}</span>`;
   }
+  return initial;
 }
 
 function resolveUrl(url) {
@@ -690,9 +750,7 @@ function formatFileSize(bytes) {
 function showToast(title, text, onClick, avatarUser) {
   const el = document.createElement('div');
   el.className = 'toast';
-  const avatarHtml = avatarUser && avatarUser.avatar
-    ? `<div class="avatar small"><img src="${escapeHtml(resolveUrl(avatarUser.avatar))}"/></div>`
-    : `<div class="avatar small">${title[0].toUpperCase()}</div>`;
+  const avatarHtml = `<div class="avatar small">${avatarInnerHtml(avatarUser || { username: title })}</div>`;
   el.innerHTML = `${avatarHtml}<div class="toast-text"><div class="toast-title">${escapeHtml(title)}</div><div class="toast-body">${escapeHtml(text)}</div></div>`;
   el.onclick = () => { onClick && onClick(); el.remove(); };
   $('toastContainer').appendChild(el);
@@ -758,9 +816,7 @@ function renderConversations() {
     const preview = c.lastMessage ? previewForMessage(c.lastMessage) : 'Say hi 👋';
     const time = c.lastMessage ? timeAgo(c.lastMessage.created_at) : '';
     const unread = c.unreadCount > 0;
-    const avatarHtml = c.otherUser.avatar
-      ? `<img src="${escapeHtml(resolveUrl(c.otherUser.avatar))}" />`
-      : c.name[0].toUpperCase();
+    const avatarHtml = avatarInnerHtml(c.otherUser);
     return `
     <div class="list-item ${currentRoom === c.room_id ? 'active' : ''} ${unread ? 'unread' : ''}" data-room="${c.room_id}" data-name="${c.name}" data-userid="${c.otherUser.id}">
       <div class="avatar">${avatarHtml}</div>
@@ -801,7 +857,7 @@ async function searchUsers(q) {
       return;
     }
     el.innerHTML = `<div class="section-label">Search Results</div>` + users.map(u => {
-      const avatarHtml = u.avatar ? `<img src="${escapeHtml(resolveUrl(u.avatar))}" />` : u.username[0].toUpperCase();
+      const avatarHtml = avatarInnerHtml(u);
       return `
       <div class="list-item" data-userid="${u.id}" data-username="${u.username}">
         <div class="avatar">${avatarHtml}</div>
@@ -911,6 +967,16 @@ function closeConversation() {
 
 $('backBtn').onclick = closeConversation;
 
+// Desktop: clicking an empty area of the sidebar (not a conversation item,
+// not the profile/search bar) deselects the current conversation, returning
+// to the "Select a conversation..." placeholder.
+$('sidebar').addEventListener('click', (e) => {
+  const emptyAreaIds = ['sidebar', 'sidebarList', 'conversationList'];
+  if (emptyAreaIds.includes(e.target.id) || e.target.classList.contains('section-label') || e.target.classList.contains('empty-hint')) {
+    if (currentRoom) closeConversation();
+  }
+});
+
 async function markAsRead(roomId) {
   try {
     await api(`/rooms/${roomId}/read`, { method: 'POST' });
@@ -949,6 +1015,8 @@ function handleEvent(data) {
     case 'new_message': {
       const m = data.payload;
       const isFromMe = (m.sender_id || (m.sender && m.sender.id)) === myUser.id;
+
+      if (!isFromMe) playMessageReceivedSound();
 
       let conv = conversations.find(c => c.room_id === m.room_id);
       if (conv) {
@@ -1093,20 +1161,34 @@ function scrollToBottom() {
   el.scrollTop = el.scrollHeight;
 }
 
-// ---- LIGHTBOX (image zoom, in-page) ----
+// ---- LIGHTBOX (image zoom + pan, in-page) ----
 function openLightbox(src) {
   $('lightboxImg').src = src;
   $('lightboxImg').classList.remove('zoomed');
+  $('lightboxViewport').classList.remove('zoomed');
   $('lightboxOverlay').classList.add('visible');
 }
 function closeLightbox() {
   $('lightboxOverlay').classList.remove('visible');
   $('lightboxImg').src = '';
   $('lightboxImg').classList.remove('zoomed');
+  $('lightboxViewport').classList.remove('zoomed');
 }
 $('lightboxClose').onclick = closeLightbox;
 $('lightboxOverlay').onclick = (e) => { if (e.target === $('lightboxOverlay')) closeLightbox(); };
-$('lightboxImg').onclick = (e) => { e.stopPropagation(); $('lightboxImg').classList.toggle('zoomed'); };
+$('lightboxImg').onclick = (e) => {
+  e.stopPropagation();
+  const zoomed = $('lightboxImg').classList.toggle('zoomed');
+  $('lightboxViewport').classList.toggle('zoomed', zoomed);
+  if (zoomed) {
+    // Center the initial scroll position so the user can pan in any direction
+    requestAnimationFrame(() => {
+      const vp = $('lightboxViewport');
+      vp.scrollLeft = (vp.scrollWidth - vp.clientWidth) / 2;
+      vp.scrollTop = (vp.scrollHeight - vp.clientHeight) / 2;
+    });
+  }
+};
 
 // ---- DOCUMENT VIEWER (in-page) ----
 function openDocViewer(url, filename) {
@@ -1202,7 +1284,13 @@ function clearAttachment() {
 
 // ---- COMPOSER ----
 $('sendBtn').onclick = sendMessage;
-$('msgInput').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } };
+$('msgInput').onkeydown = (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendMessage(); return; }
+  // Skip sound for modifier/navigation keys
+  if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+    playTypingSound();
+  }
+};
 $('msgInput').oninput = () => {
   if (!currentRoom) return;
   send('typing', { room_id: currentRoom });
@@ -1229,6 +1317,7 @@ function sendMessage() {
     send('send_message', { room_id: currentRoom, content, type: 'text' });
   }
 
+  playMessageSentSound();
   $('msgInput').value = '';
   send('stop_typing', { room_id: currentRoom });
 }

@@ -76,6 +76,11 @@ func (h *AuthHandler) SearchUsers(c *gin.Context) {
 		return
 	}
 
+	// Use live WebSocket connection status instead of the (possibly stale) DB flag
+	for i := range users {
+		users[i].IsOnline = h.hub.IsUserOnline(users[i].ID)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": users})
 }
 
@@ -92,6 +97,9 @@ func (h *AuthHandler) GetUserByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
+
+	// Use live WebSocket connection status instead of the (possibly stale) DB flag
+	user.IsOnline = h.hub.IsUserOnline(user.ID)
 
 	c.JSON(http.StatusOK, user)
 }

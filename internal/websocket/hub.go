@@ -4,9 +4,18 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+)
+
+const (
+	// writeWait is the time allowed to write a message to the peer.
+	writeWait = 10 * time.Second
+	// pingPeriod is how often we send pings. Must be less than the client's
+	// read deadline (60s) so the connection never times out while alive.
+	pingPeriod = 30 * time.Second
 )
 
 // Client represents a single WebSocket connection
@@ -27,7 +36,6 @@ type Hub struct {
 	userConn   map[uuid.UUID]*Client        // userID -> Client (latest connection)
 	roomUsers  map[uuid.UUID]map[uuid.UUID]bool // roomID -> set of clientIDs
 
-	Register   chan *Client
 	Unregister chan *Client
 	Broadcast  chan *RoomMessage
 
@@ -45,7 +53,6 @@ func NewHub() *Hub {
 		clients:    make(map[uuid.UUID]*Client),
 		userConn:   make(map[uuid.UUID]*Client),
 		roomUsers:  make(map[uuid.UUID]map[uuid.UUID]bool),
-		Register:   make(chan *Client, 256),
 		Unregister: make(chan *Client, 256),
 		Broadcast:  make(chan *RoomMessage, 512),
 	}
@@ -54,9 +61,6 @@ func NewHub() *Hub {
 func (h *Hub) Run() {
 	for {
 		select {
-		case client := <-h.Register:
-			h.registerClient(client)
-
 		case client := <-h.Unregister:
 			h.unregisterClient(client)
 
@@ -73,6 +77,14 @@ func (h *Hub) registerClient(client *Client) {
 	h.clients[client.ID] = client
 	h.userConn[client.UserID] = client
 	log.Printf("✅ Client registered: %s (user: %s)", client.ID, client.Username)
+}
+
+// RegisterClient synchronously registers a client with the hub.
+// Unlike sending to the Register channel (processed asynchronously by Run()),
+// this returns only once the client is fully registered — so subsequent
+// calls like JoinRoom are guaranteed to see it in h.clients immediately.
+func (h *Hub) RegisterClient(client *Client) {
+	h.registerClient(client)
 }
 
 func (h *Hub) unregisterClient(client *Client) {
@@ -204,26 +216,58 @@ func (h *Hub) IsUserOnline(userID uuid.UUID) bool {
 	return ok
 }
 
+// ClientIDForUser returns the WS client ID for a connected user, or uuid.Nil.
+// Used to exclude a user from broadcasts (e.g. typing indicator to self).
+func (h *Hub) ClientIDForUser(userID uuid.UUID) uuid.UUID {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if c, ok := h.userConn[userID]; ok {
+		return c.ID
+	}
+	return uuid.Nil
+}
+
 // Client methods
 func (c *Client) WritePump() {
+	ticker := time.NewTicker(pingPeriod)
 	defer func() {
+		ticker.Stop()
 		c.Conn.Close()
 	}()
 
 	for {
-		message, ok := <-c.Send
-		if !ok {
-			c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
-			return
-		}
+		select {
+		case message, ok := <-c.Send:
+			if !ok {
+				c.mu.Lock()
+				c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+				c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.mu.Unlock()
+				return
+			}
 
-		c.mu.Lock()
-		err := c.Conn.WriteMessage(websocket.TextMessage, message)
-		c.mu.Unlock()
+			c.mu.Lock()
+			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			err := c.Conn.WriteMessage(websocket.TextMessage, message)
+			c.mu.Unlock()
 
-		if err != nil {
-			log.Printf("Write error for client %s: %v", c.ID, err)
-			return
+			if err != nil {
+				log.Printf("Write error for client %s: %v", c.ID, err)
+				return
+			}
+
+		case <-ticker.C:
+			// Periodic ping keeps the connection alive (resets the
+			// client's 60s read deadline once the browser auto-replies
+			// with a pong) and detects dead connections quickly.
+			c.mu.Lock()
+			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			err := c.Conn.WriteMessage(websocket.PingMessage, nil)
+			c.mu.Unlock()
+
+			if err != nil {
+				return
+			}
 		}
 	}
 }

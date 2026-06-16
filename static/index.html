@@ -80,14 +80,17 @@
   .me-status { font-size: 12px; color: var(--text-dim); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .search-box { padding: 10px 14px; flex-shrink: 0; }
-  .search-box input { width: 100%; padding: 10px 14px; border-radius: 20px; border: none; background: var(--panel-light); color: var(--text); font-size: 14px; transition: background .15s; }
+  .search-input-wrap { position: relative; display: flex; align-items: center; }
+  .search-icon { position: absolute; left: 12px; width: 17px; height: 17px; color: var(--text-dim); pointer-events: none; }
+  .search-box input { width: 100%; padding: 10px 14px 10px 38px; border-radius: 20px; border: none; background: var(--panel-light); color: var(--text); font-size: 14px; transition: background .15s, box-shadow .15s; }
   .search-box input::placeholder { color: var(--text-dim); }
-  .search-box input:focus { outline: 1px solid var(--accent); }
+  .search-box input:focus { outline: none; box-shadow: 0 0 0 1.5px var(--accent); }
+  .search-box input:focus ~ .search-icon, .search-input-wrap:focus-within .search-icon { color: var(--accent); }
 
   .list { flex: 1; overflow-y: auto; min-height: 0; }
   .section-label { padding: 8px 16px 4px; font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
 
-  .list-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(128,128,128,0.06); transition: background .12s; animation: fadeIn .2s ease; }
+  .list-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(128,128,128,0.06); transition: background .12s; }
   .list-item:hover { background: var(--panel-light); }
   .list-item.active { background: var(--panel-light); }
   .list-item.unread .list-item-name { font-weight: 700; }
@@ -104,7 +107,8 @@
 
   /* ============ CHAT AREA ============ */
   .chat-area { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-  .chat-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 15px; flex-direction: column; gap: 8px; background: var(--chat-bg); text-align: center; padding: 20px; }
+  .chat-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 15px; flex-direction: column; gap: 8px; background: var(--chat-bg); text-align: center; padding: 20px; animation: crossFadeIn .18s ease; }
+  .chat-placeholder.fading-out { animation: crossFadeOut .12s ease forwards; }
   .chat-header { padding: 10px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); background: var(--panel); flex-shrink: 0; }
   .chat-header-info { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; cursor: pointer; border-radius: 8px; padding: 4px 8px; transition: background .12s; }
   .chat-header-info:hover { background: var(--panel-light); }
@@ -114,7 +118,10 @@
   .back-btn:hover { background: var(--panel-light); }
 
   #chatPanel { display: none; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
-  #chatPanel.visible { display: flex; }
+  #chatPanel.visible { display: flex; animation: crossFadeIn .18s ease; }
+  #chatPanel.fading-out { animation: crossFadeOut .12s ease forwards; }
+  @keyframes crossFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes crossFadeOut { from { opacity: 1; } to { opacity: 0; } }
 
   .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 8% 8px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; background: var(--chat-bg); }
   .msg-row { display: flex; flex-shrink: 0; background: transparent; padding: 2px 0; animation: msgIn .18s ease; }
@@ -129,6 +136,7 @@
   .msg .meta-row { display: flex; gap: 4px; justify-content: flex-end; align-items: center; margin-top: 4px; }
   .msg .time { font-size: 11px; color: var(--text-dim); }
   .msg .ticks { font-size: 13px; color: var(--text-dim); line-height: 1; }
+  .msg .ticks.ticks-placeholder { visibility: hidden; width: 0; overflow: hidden; }
   .msg .ticks.read { color: #53bdeb; }
   .msg img.attach-image { max-width: 100%; width: 240px; height: auto; max-height: 280px; object-fit: cover; border-radius: 8px; display: block; margin-bottom: 4px; cursor: pointer; transition: opacity .1s; }
   .msg img.attach-image:hover { opacity: 0.92; }
@@ -402,7 +410,13 @@
     </div>
 
     <div class="search-box">
-      <input id="userSearch" placeholder="🔍 Search username to start chat..." />
+      <div class="search-input-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+          <path d="M20 20L16.65 16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <input id="userSearch" placeholder="Search username to start chat..." />
+      </div>
     </div>
 
     <div class="list" id="sidebarList">
@@ -456,6 +470,7 @@ let token = null, myUser = null, ws = null;
 let currentRoom = null, currentPartner = null, currentPartnerId = null;
 let typingTimeout = null;
 let conversations = [];
+const renderedMessageIds = new Set();
 let pendingAttachment = null;
 
 const $ = id => document.getElementById(id);
@@ -467,45 +482,66 @@ function getAudioCtx() {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (AC) audioCtx = new AC();
   }
-  // Browsers suspend AudioContext until a user gesture; resume if needed
-  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   return audioCtx;
 }
 
+// Plays a tone, making sure the AudioContext is actually running first.
+// If the context is suspended (autoplay policy), schedule the tone to
+// play right after resume() resolves instead of silently doing nothing.
 function playTone(freq, duration, volume, type) {
   const ctx = getAudioCtx();
   if (!ctx) return;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.type = type || 'sine';
-  osc.frequency.value = freq;
-  gain.gain.value = volume;
-  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start();
-  osc.stop(ctx.currentTime + duration);
+
+  const doPlay = () => {
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+
+    // Short attack to avoid clicks, then exponential decay
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(volume, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration + 0.02);
+  };
+
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(doPlay).catch(() => {});
+  } else {
+    doPlay();
+  }
 }
 
 // Soft "tick" sound for each keystroke while typing
 function playTypingSound() {
-  playTone(700 + Math.random() * 150, 0.04, 0.03, 'square');
+  playTone(620 + Math.random() * 120, 0.05, 0.12, 'triangle');
 }
 
 // Two-tone "pop" for incoming messages
 function playMessageReceivedSound() {
-  playTone(880, 0.09, 0.08, 'sine');
-  setTimeout(() => playTone(1100, 0.12, 0.07, 'sine'), 80);
+  playTone(740, 0.12, 0.18, 'sine');
+  setTimeout(() => playTone(980, 0.16, 0.16, 'sine'), 90);
 }
 
 // Single soft tone for sent messages
 function playMessageSentSound() {
-  playTone(600, 0.07, 0.05, 'sine');
+  playTone(520, 0.09, 0.14, 'sine');
 }
 
-// Unlock audio on first user interaction (required by browser autoplay policies)
-document.addEventListener('click', () => getAudioCtx(), { once: true });
-document.addEventListener('keydown', () => getAudioCtx(), { once: true });
+// AudioContext can only be created/resumed after a user gesture (browser
+// autoplay policy). Warm it up on the very first interaction anywhere.
+function unlockAudio() {
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === 'suspended') ctx.resume();
+}
+['click', 'keydown', 'touchstart'].forEach(evt => {
+  document.addEventListener(evt, unlockAudio, { once: true });
+});
 
 // ---- THEME & APPEARANCE ----
 const CHAT_BG_PRESETS = {
@@ -692,18 +728,28 @@ $('saveProfileBtn').onclick = async () => {
 
 // ---- OTHER USER PROFILE MODAL ----
 $('chatHeaderInfo').onclick = () => openUserProfile(currentPartnerId);
-$('closeUserProfileModal').onclick = () => $('userProfileModal').classList.remove('visible');
+$('closeUserProfileModal').onclick = () => {
+  $('userProfileModal').classList.remove('visible');
+  openContactInfoUserId = null;
+};
+
+let openContactInfoUserId = null;
 
 async function openUserProfile(userId) {
   if (!userId) return;
   try {
     const user = await api(`/users/${userId}`);
-    setAvatarEl($('userProfileAvatar'), user);
-    $('userProfileName').textContent = user.username;
-    $('userProfileOnline').textContent = user.is_online ? '🟢 Online' : `Last seen ${timeAgo(user.last_seen)} ago`;
-    $('userProfileStatus').textContent = user.status || 'No status';
+    renderUserProfileModal(user);
+    openContactInfoUserId = userId;
     $('userProfileModal').classList.add('visible');
   } catch (e) { console.error(e); }
+}
+
+function renderUserProfileModal(user) {
+  setAvatarEl($('userProfileAvatar'), user);
+  $('userProfileName').textContent = user.username;
+  $('userProfileOnline').textContent = user.is_online ? '🟢 Online' : `Last seen ${timeAgo(user.last_seen)} ago`;
+  $('userProfileStatus').textContent = user.status || 'No status';
 }
 
 // ---- API HELPER ----
@@ -797,6 +843,27 @@ function previewForMessage(m) {
   if (m.type === 'image') return youPrefix + '📷 Photo';
   if (m.type === 'file') return youPrefix + '📎 ' + (m.file_name || 'File');
   return youPrefix + escapeHtml(m.content);
+}
+
+// Updates only the avatar + name + online-dot of a single conversation's
+// sidebar item in place, without touching the rest of the list — avoids the
+// "everything refreshes" flash when only one contact's profile changed.
+function updateConversationItemInPlace(userId) {
+  const conv = conversations.find(c => c.otherUser && c.otherUser.id === userId);
+  if (!conv) return false;
+
+  const item = document.querySelector(`#conversationList .list-item[data-userid="${userId}"]`);
+  if (!item) return false;
+
+  const avatarEl = item.querySelector('.avatar');
+  if (avatarEl) avatarEl.innerHTML = avatarInnerHtml(conv.otherUser);
+
+  const nameEl = item.querySelector('.list-item-name');
+  if (nameEl) {
+    nameEl.innerHTML = `${escapeHtml(conv.name)} ${conv.isOnline ? '<span class="online-dot"></span>' : ''}`;
+  }
+
+  return true;
 }
 
 function renderConversations() {
@@ -912,18 +979,34 @@ async function openConversation(roomId, name, partnerId) {
     send('leave_room', { room_id: currentRoom });
   }
 
+  // If switching from the placeholder, fade it out first for a smooth transition
+  const switchingFromPlaceholder = !currentRoom;
+
   currentRoom = roomId;
   currentPartner = name;
   currentPartnerId = partnerId;
   clearAttachment();
   closeAttachMenu();
 
-  $('chatPlaceholder').style.display = 'none';
-  $('chatPanel').classList.add('visible');
+  const showPanel = () => {
+    $('chatPlaceholder').style.display = 'none';
+    $('chatPlaceholder').classList.remove('fading-out');
+    $('chatPanel').classList.remove('fading-out');
+    $('chatPanel').classList.add('visible');
+  };
+
+  if (switchingFromPlaceholder) {
+    $('chatPlaceholder').classList.add('fading-out');
+    setTimeout(showPanel, 110);
+  } else {
+    showPanel();
+  }
+
   $('app').classList.add('chat-open'); // mobile: show chat area
   $('chatName').textContent = name;
   $('chatStatus').textContent = '';
   $('messages').innerHTML = '';
+  renderedMessageIds.clear();
   $('typingIndicator').innerHTML = '';
   $('uploadError').textContent = '';
 
@@ -959,22 +1042,29 @@ function closeConversation() {
   currentPartnerId = null;
   clearAttachment();
   closeAttachMenu();
-  $('chatPanel').classList.remove('visible');
-  $('chatPlaceholder').style.display = 'flex';
+
+  $('chatPanel').classList.add('fading-out');
+  setTimeout(() => {
+    $('chatPanel').classList.remove('visible', 'fading-out');
+    $('chatPlaceholder').style.display = 'flex';
+    $('chatPlaceholder').classList.remove('fading-out');
+  }, 110);
+
   $('app').classList.remove('chat-open'); // mobile: show sidebar again
   renderConversations();
 }
 
 $('backBtn').onclick = closeConversation;
 
-// Desktop: clicking an empty area of the sidebar (not a conversation item,
-// not the profile/search bar) deselects the current conversation, returning
-// to the "Select a conversation..." placeholder.
+// Desktop: clicking anywhere in the sidebar that is NOT the user's own
+// profile button and NOT a conversation/search-result item deselects the
+// current conversation, returning to the "Select a conversation..." placeholder.
 $('sidebar').addEventListener('click', (e) => {
-  const emptyAreaIds = ['sidebar', 'sidebarList', 'conversationList'];
-  if (emptyAreaIds.includes(e.target.id) || e.target.classList.contains('section-label') || e.target.classList.contains('empty-hint')) {
-    if (currentRoom) closeConversation();
-  }
+  if (!currentRoom) return;
+  if (e.target.closest('#meBtn')) return;
+  if (e.target.closest('.list-item')) return;
+  if (e.target.id === 'userSearch') return;
+  closeConversation();
 });
 
 async function markAsRead(roomId) {
@@ -1074,11 +1164,19 @@ function handleEvent(data) {
           c.name = updatedUser.username;
         }
       });
-      renderConversations();
+      // Update just this contact's row (avatar/name) instead of re-rendering
+      // the whole sidebar list, which previously caused a visible "refresh".
+      if (!updateConversationItemInPlace(updatedUser.id)) {
+        renderConversations();
+      }
       if (currentPartnerId === updatedUser.id) {
         const conv = conversations.find(c => c.room_id === currentRoom);
         if (conv) updateChatHeader(conv);
         $('chatName').textContent = updatedUser.username;
+      }
+      // Live-update the Contact Info modal if it's currently showing this user
+      if (openContactInfoUserId === updatedUser.id) {
+        renderUserProfileModal(updatedUser);
       }
       break;
     }
@@ -1113,6 +1211,13 @@ function handleEvent(data) {
 
 // ---- MESSAGES ----
 function renderMessage(m) {
+  // Dedup: if a WS reconnect briefly leaves a stale connection registered,
+  // the same message could be broadcast twice. Skip duplicates by ID.
+  if (m.id) {
+    if (renderedMessageIds.has(m.id)) return;
+    renderedMessageIds.add(m.id);
+  }
+
   const isMe = (m.sender_id || (m.sender && m.sender.id)) === myUser.id;
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
 
@@ -1142,7 +1247,7 @@ function renderMessage(m) {
       ${textHtml}
       <div class="meta-row">
         <span class="time">${time}</span>
-        ${isMe ? '<span class="ticks">✓✓</span>' : ''}
+        ${isMe ? '<span class="ticks">✓✓</span>' : '<span class="ticks ticks-placeholder">✓✓</span>'}
       </div>
     </div>
   `;

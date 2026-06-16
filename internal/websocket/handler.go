@@ -81,7 +81,9 @@ func (h *Handler) HandleWS(c *gin.Context) {
 		Hub:      h.hub,
 	}
 
-	h.hub.Register <- client
+	// Register synchronously: JoinRoom below requires the client to already
+	// exist in the hub's client map, which an async channel send cannot guarantee.
+	h.hub.RegisterClient(client)
 
 	// Auto-join every room this user belongs to, so message broadcasts
 	// reach them even if they haven't explicitly opened that conversation.
@@ -325,10 +327,24 @@ func (h *Handler) broadcastToRoom(roomID, excludeClientID uuid.UUID, eventType s
 		return
 	}
 
-	h.hub.Broadcast <- &RoomMessage{
-		RoomID:  roomID,
-		Payload: data,
-		Exclude: excludeClientID,
+	// Fetch actual room members from DB so delivery is guaranteed regardless
+	// of whether each client has explicitly "joined" the room in the WS hub.
+	// This eliminates the race condition between registration and auto-join
+	// that previously caused messages to silently not arrive.
+	members, err := h.roomRepo.GetMembers(roomID)
+	if err != nil {
+		return
+	}
+
+	for _, member := range members {
+		// Exclude the client identified by excludeClientID (used for typing events
+		// so you don't see your own "is typing" indicator) — but for new_message
+		// we pass uuid.Nil so all members including the sender receive it
+		// (sender needs it to confirm delivery and get the DB-assigned timestamp).
+		if excludeClientID != uuid.Nil && h.hub.ClientIDForUser(member.UserID) == excludeClientID {
+			continue
+		}
+		h.hub.SendToUser(member.UserID, data)
 	}
 }
 

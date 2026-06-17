@@ -23,6 +23,7 @@ var allowedExtensions = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true,
 	".pdf": true, ".doc": true, ".docx": true, ".xls": true, ".xlsx": true,
 	".txt": true, ".zip": true, ".csv": true,
+	".mp3": true, ".ogg": true, ".wav": true, ".webm": true, ".m4a": true,
 }
 
 type UploadHandler struct{}
@@ -82,12 +83,14 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 	}
 
 	isImage := ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".webp"
+	isAudio := ext == ".mp3" || ext == ".ogg" || ext == ".wav" || ext == ".webm" || ext == ".m4a"
 
 	c.JSON(http.StatusOK, gin.H{
-		"url":       "/static/uploads/" + filename,
-		"file_name": header.Filename,
-		"file_size": written,
-		"is_image":  isImage,
+		"url":         "/static/uploads/" + filename,
+		"file_name":   header.Filename,
+		"file_size":   written,
+		"is_image":    isImage,
+		"is_audio":    isAudio,
 		"uploaded_by": userID,
 	})
 }

@@ -1,8 +1,8 @@
-# ChatApp
+# 💬 ChatApp — Real-time Chat with WebSocket
 
 A **production-ready** real-time chat application built with Go, featuring WebSocket connections, JWT authentication, room management, and PostgreSQL persistence.
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 chatapp/
@@ -49,7 +49,7 @@ chatapp/
 └── Makefile
 ```
 
-## Tech Stack
+## 🚀 Tech Stack
 
 | Layer         | Technology               |
 |---------------|--------------------------|
@@ -61,7 +61,7 @@ chatapp/
 | Password      | bcrypt                   |
 | UUID          | google/uuid              |
 
-## Quick Start
+## ⚡ Quick Start
 
 ### 1. Clone & setup environment
 ```bash
@@ -86,36 +86,36 @@ Server starts at `http://localhost:8080`
 
 ---
 
-## REST API Endpoints
+## 📡 REST API Endpoints
 
 ### Auth
 | Method | Endpoint              | Description       | Auth |
 |--------|-----------------------|-------------------|------|
-| POST   | /api/v1/auth/register | Register new user |    |
-| POST   | /api/v1/auth/login    | Login             |    |
-| GET    | /api/v1/auth/me       | Get my profile    |    |
+| POST   | /api/v1/auth/register | Register new user | ❌   |
+| POST   | /api/v1/auth/login    | Login             | ❌   |
+| GET    | /api/v1/auth/me       | Get my profile    | ✅   |
 
 ### Rooms
 | Method | Endpoint                    | Description          | Auth |
 |--------|-----------------------------|----------------------|------|
-| GET    | /api/v1/rooms               | List public rooms    |    |
-| POST   | /api/v1/rooms               | Create room          |    |
-| GET    | /api/v1/rooms/me            | My joined rooms      |    |
-| GET    | /api/v1/rooms/:id           | Get room detail      |    |
-| DELETE | /api/v1/rooms/:id           | Delete room          |    |
-| POST   | /api/v1/rooms/:id/join      | Join room            |    |
-| POST   | /api/v1/rooms/:id/leave     | Leave room           |    |
-| GET    | /api/v1/rooms/:id/messages | Get messages      |    |
+| GET    | /api/v1/rooms               | List public rooms    | ✅   |
+| POST   | /api/v1/rooms               | Create room          | ✅   |
+| GET    | /api/v1/rooms/me            | My joined rooms      | ✅   |
+| GET    | /api/v1/rooms/:id           | Get room detail      | ✅   |
+| DELETE | /api/v1/rooms/:id           | Delete room          | ✅   |
+| POST   | /api/v1/rooms/:id/join      | Join room            | ✅   |
+| POST   | /api/v1/rooms/:id/leave     | Leave room           | ✅   |
+| GET    | /api/v1/rooms/:id/messages | Get messages      | ✅   |
 
 ### Messages
 | Method | Endpoint              | Description    | Auth |
 |--------|-----------------------|----------------|------|
-| PATCH  | /api/v1/messages/:id  | Edit message   |    |
-| DELETE | /api/v1/messages/:id  | Delete message |    |
+| PATCH  | /api/v1/messages/:id  | Edit message   | ✅   |
+| DELETE | /api/v1/messages/:id  | Delete message | ✅   |
 
 ---
 
-## WebSocket Protocol
+## 🔌 WebSocket Protocol
 
 ### Connect
 ```
@@ -176,7 +176,7 @@ Headers: Authorization: Bearer <jwt_token>
 
 ---
 
-## Example API Usage
+## 🧪 Example API Usage
 
 ### Register
 ```bash
@@ -208,29 +208,29 @@ curl http://localhost:8080/api/v1/rooms/<room_id>/messages?page=1&limit=50 \
 
 ---
 
-## Key Features
+## 🌟 Key Features
 
 - **Real-time messaging** via WebSocket with gorilla/websocket
-- **Room-based chat** public, private, direct message rooms
-- **Direct Messages (DM)** 1-on-1 conversations, auto-created room per pair
-- **JWT Authentication** stateless auth, 7-day token expiry
-- **Online presence** track who's online in real-time
-- **Typing indicators** broadcast typing status per room
-- **Message history** paginated REST API for past messages
-- **Edit & soft-delete** messages deleted content preserved in DB
-- **Reply to messages** threaded conversation support
-- **Rate limiting** token-bucket per IP, stricter on auth endpoints
-- **Structured logging** zerolog, pretty console (dev) / JSON (prod)
-- **Graceful shutdown** SIGINT/SIGTERM handling with 10s drain
-- **Unit tests** service layer fully covered with mocked repositories
-- **WebSocket test client** interactive HTML client at `/static/index.html`
-- **Clean Architecture** domain → repository → service → handler layers
-- **Docker ready** full docker-compose setup included
-- **CI pipeline** GitHub Actions: vet, test, build, format check
+- **Room-based chat** — public, private, direct message rooms
+- **Direct Messages (DM)** — 1-on-1 conversations, auto-created room per pair
+- **JWT Authentication** — stateless auth, 7-day token expiry
+- **Online presence** — track who's online in real-time
+- **Typing indicators** — broadcast typing status per room
+- **Message history** — paginated REST API for past messages
+- **Edit & soft-delete** messages — deleted content preserved in DB
+- **Reply to messages** — threaded conversation support
+- **Rate limiting** — token-bucket per IP, stricter on auth endpoints
+- **Structured logging** — zerolog, pretty console (dev) / JSON (prod)
+- **Graceful shutdown** — SIGINT/SIGTERM handling with 10s drain
+- **Unit tests** — service layer fully covered with mocked repositories
+- **WebSocket test client** — interactive HTML client at `/static/index.html`
+- **Clean Architecture** — domain → repository → service → handler layers
+- **Docker ready** — full docker-compose setup included
+- **CI pipeline** — GitHub Actions: vet, test, build, format check
 
 ---
 
-## Testing
+## 🧪 Testing
 
 ```bash
 make test          # run all unit tests
@@ -238,11 +238,11 @@ go test ./... -v -cover   # with coverage
 ```
 
 Tests live in `test/service/*_test.go` and use `testify/mock` to mock
-repository interfaces no database needed to run them.
+repository interfaces — no database needed to run them.
 
 ---
 
-## WebSocket Test Client
+## 🌐 WebSocket Test Client
 
 A ready-to-use browser client is included at:
 
@@ -257,7 +257,7 @@ It lets you:
 
 ---
 
-## Rate Limiting
+## 🛡️ Rate Limiting
 
 | Endpoint group | Limit          |
 |-----------------|----------------|
@@ -268,12 +268,12 @@ Exceeding the limit returns `429 Too Many Requests`.
 
 ---
 
-## Direct Messages
+## 💬 Direct Messages
 
 | Method | Endpoint    | Description                          | Auth |
 |--------|-------------|---------------------------------------|------|
-| GET    | /api/v1/dm  | List my DM conversations              |    |
-| POST   | /api/v1/dm  | Get or create DM room with a user `{"recipient_id":"uuid"}` |    |
+| GET    | /api/v1/dm  | List my DM conversations              | ✅   |
+| POST   | /api/v1/dm  | Get or create DM room with a user `{"recipient_id":"uuid"}` | ✅   |
 
 Once you have the DM room's ID, use it like any other room for
 WebSocket messaging and message history (`/api/v1/rooms/:id/messages`).

@@ -226,11 +226,11 @@ func (h *Handler) handleSendMessage(client *Client, payload json.RawMessage) {
 	}
 
 	msgType := domain.MessageTypeText
-	if p.Type == string(domain.MessageTypeImage) || p.Type == string(domain.MessageTypeFile) {
+	if p.Type == string(domain.MessageTypeImage) || p.Type == string(domain.MessageTypeFile) || p.Type == string(domain.MessageTypeAudio) {
 		msgType = domain.MessageType(p.Type)
 	}
 
-	// Text messages require content; file/image messages require a file URL
+	// Text messages require content; file/image/audio messages require a file URL
 	if msgType == domain.MessageTypeText {
 		if p.Content == "" || len(p.Content) > 2000 {
 			client.SendEvent(string(domain.EventError), gin.H{"error": "Message content must be 1-2000 characters"})
@@ -238,7 +238,7 @@ func (h *Handler) handleSendMessage(client *Client, payload json.RawMessage) {
 		}
 	} else {
 		if p.FileURL == "" {
-			client.SendEvent(string(domain.EventError), gin.H{"error": "file_url is required for file/image messages"})
+			client.SendEvent(string(domain.EventError), gin.H{"error": "file_url is required for file/image/audio messages"})
 			return
 		}
 		if len(p.Content) > 2000 {

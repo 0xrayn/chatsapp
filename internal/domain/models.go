@@ -79,9 +79,10 @@ type Message struct {
 type MessageType string
 
 const (
-	MessageTypeText  MessageType = "text"
-	MessageTypeImage MessageType = "image"
-	MessageTypeFile  MessageType = "file"
+	MessageTypeText   MessageType = "text"
+	MessageTypeImage  MessageType = "image"
+	MessageTypeFile   MessageType = "file"
+	MessageTypeAudio  MessageType = "audio"
 	MessageTypeSystem MessageType = "system"
 )
 

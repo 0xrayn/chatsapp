@@ -7,16 +7,17 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID  `json:"id" gorm:"type:uuid;primary_key"`
-	Username  string     `json:"username" gorm:"uniqueIndex;not null"`
-	Email     string     `json:"email" gorm:"uniqueIndex;not null"`
-	Password  string     `json:"-" gorm:"not null"`
-	Avatar    string     `json:"avatar"`
-	Status    string     `json:"status" gorm:"default:'Hey there! I am using ChatApp'"`
-	IsOnline  bool       `json:"is_online" gorm:"default:false"`
-	LastSeen  time.Time  `json:"last_seen"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	ID                uuid.UUID  `json:"id" gorm:"type:uuid;primary_key"`
+	Username          string     `json:"username" gorm:"uniqueIndex;not null"`
+	Email             string     `json:"email" gorm:"uniqueIndex;not null"`
+	Password          string     `json:"-" gorm:"not null"`
+	Avatar            string     `json:"avatar"`
+	Status            string     `json:"status" gorm:"default:'Hey there! I am using ChatApp'"`
+	IsOnline          bool       `json:"is_online" gorm:"default:false"`
+	LastSeen          time.Time  `json:"last_seen"`
+	UsernameChangedAt *time.Time `json:"-" gorm:"default:null"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
 type Room struct {
@@ -151,6 +152,20 @@ type SendMessageRequest struct {
 type UpdateProfileRequest struct {
 	Status string `json:"status,omitempty"`
 	Avatar string `json:"avatar,omitempty"`
+}
+
+type UpdateUsernameRequest struct {
+	Username string `json:"username" binding:"required,min=3,max=30"`
+}
+
+type UpdateEmailRequest struct {
+	Email           string `json:"email" binding:"required,email"`
+	CurrentPassword string `json:"current_password" binding:"required"`
+}
+
+type UpdatePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
 }
 
 type EditMessageRequest struct {

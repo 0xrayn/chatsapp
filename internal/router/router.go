@@ -67,6 +67,9 @@ func SetupRoutes(cfg Config) *gin.Engine {
 	{
 		protected.GET("/auth/me", cfg.AuthHandler.GetProfile)
 		protected.PATCH("/auth/me", cfg.AuthHandler.UpdateProfile)
+		protected.PATCH("/auth/username", cfg.AuthHandler.UpdateUsername)
+		protected.PATCH("/auth/email", cfg.AuthHandler.UpdateEmail)
+		protected.PATCH("/auth/password", cfg.AuthHandler.UpdatePassword)
 		protected.GET("/users/search", cfg.AuthHandler.SearchUsers)
 		protected.GET("/users/:id", cfg.AuthHandler.GetUserByID)
 		protected.POST("/upload", cfg.UploadHandler.Upload)

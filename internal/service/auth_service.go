@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"chatapp/internal/domain"
@@ -119,4 +120,92 @@ func (s *AuthService) UpdateProfile(userID uuid.UUID, req domain.UpdateProfileRe
 	}
 
 	return user, nil
+}
+
+const UsernameCooldownHours = 6
+
+func (s *AuthService) UpdateUsername(userID uuid.UUID, req domain.UpdateUsernameRequest) (*domain.User, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	// Enforce cooldown
+	if user.UsernameChangedAt != nil {
+		elapsed := time.Since(*user.UsernameChangedAt)
+		if elapsed < time.Duration(UsernameCooldownHours)*time.Hour {
+			remaining := time.Duration(UsernameCooldownHours)*time.Hour - elapsed
+			hours := int(remaining.Hours())
+			mins := int(remaining.Minutes()) % 60
+			return nil, fmt.Errorf("username can only be changed every %d hours. Try again in %dh %dm", UsernameCooldownHours, hours, mins)
+		}
+	}
+
+	if !middleware.ValidateUsername(req.Username) {
+		return nil, errors.New("username must be 3-30 characters: letters, numbers, underscores only")
+	}
+
+	// Check uniqueness
+	if existing, err := s.userRepo.FindByUsername(req.Username); err == nil && existing.ID != userID {
+		return nil, errors.New("username already taken")
+	}
+
+	now := time.Now()
+	user.Username = req.Username
+	user.UsernameChangedAt = &now
+
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("failed to update username")
+	}
+
+	return user, nil
+}
+
+func (s *AuthService) UpdateEmail(userID uuid.UUID, req domain.UpdateEmailRequest) (*domain.User, error) {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
+		return nil, errors.New("incorrect current password")
+	}
+
+	if existing, err := s.userRepo.FindByEmail(req.Email); err == nil && existing.ID != userID {
+		return nil, errors.New("email already in use")
+	}
+
+	user.Email = req.Email
+	if err := s.userRepo.Update(user); err != nil {
+		return nil, errors.New("failed to update email")
+	}
+
+	return user, nil
+}
+
+func (s *AuthService) UpdatePassword(userID uuid.UUID, req domain.UpdatePasswordRequest) error {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
+		return errors.New("incorrect current password")
+	}
+
+	if !middleware.ValidatePasswordStrength(req.NewPassword) {
+		return errors.New("new password must contain at least one letter and one number")
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return errors.New("failed to hash password")
+	}
+
+	user.Password = string(hashed)
+	if err := s.userRepo.Update(user); err != nil {
+		return errors.New("failed to update password")
+	}
+
+	return nil
 }

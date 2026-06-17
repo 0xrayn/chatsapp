@@ -104,6 +104,51 @@ func (h *AuthHandler) GetUserByID(c *gin.Context) {
 	c.JSON(http.StatusOK, user)
 }
 
+// PATCH /api/v1/auth/username
+func (h *AuthHandler) UpdateUsername(c *gin.Context) {
+	var req domain.UpdateUsernameRequest
+	if !middleware.BindJSONOrError(c, &req) {
+		return
+	}
+	userID := middleware.GetUserID(c)
+	user, err := h.authService.UpdateUsername(userID, req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	go h.notifyProfileUpdated(user)
+	c.JSON(http.StatusOK, user)
+}
+
+// PATCH /api/v1/auth/email
+func (h *AuthHandler) UpdateEmail(c *gin.Context) {
+	var req domain.UpdateEmailRequest
+	if !middleware.BindJSONOrError(c, &req) {
+		return
+	}
+	userID := middleware.GetUserID(c)
+	user, err := h.authService.UpdateEmail(userID, req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, user)
+}
+
+// PATCH /api/v1/auth/password
+func (h *AuthHandler) UpdatePassword(c *gin.Context) {
+	var req domain.UpdatePasswordRequest
+	if !middleware.BindJSONOrError(c, &req) {
+		return
+	}
+	userID := middleware.GetUserID(c)
+	if err := h.authService.UpdatePassword(userID, req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Password updated successfully"})
+}
+
 // PATCH /api/v1/auth/me — update avatar and/or status
 func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	var req domain.UpdateProfileRequest

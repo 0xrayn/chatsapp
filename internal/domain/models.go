@@ -125,8 +125,9 @@ type RegisterRequest struct {
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
+	// Identifier accepts either an email address or a username
+	Identifier string `json:"identifier" binding:"required"`
+	Password   string `json:"password" binding:"required"`
 }
 
 type AuthResponse struct {

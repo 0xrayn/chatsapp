@@ -66,16 +66,22 @@ func (s *AuthService) Register(req domain.RegisterRequest) (*domain.AuthResponse
 }
 
 func (s *AuthService) Login(req domain.LoginRequest) (*domain.AuthResponse, error) {
-	user, err := s.userRepo.FindByEmail(req.Email)
+	// Try email first, then username
+	user, err := s.userRepo.FindByEmail(req.Identifier)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("invalid email or password")
+			// Try as username
+			user, err = s.userRepo.FindByUsername(req.Identifier)
+			if err != nil {
+				return nil, errors.New("invalid username/email or password")
+			}
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return nil, errors.New("invalid email or password")
+		return nil, errors.New("invalid username/email or password")
 	}
 
 	token, err := middleware.GenerateToken(user.ID, user.Username)

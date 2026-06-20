@@ -69,7 +69,12 @@ func (r *roomRepository) Update(room *domain.Room) error {
 }
 
 func (r *roomRepository) Delete(id uuid.UUID) error {
-	return r.db.Delete(&domain.Room{}, "id = ?", id).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("room_id = ?", id).Delete(&domain.RoomMember{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&domain.Room{}, "id = ?", id).Error
+	})
 }
 
 func (r *roomRepository) AddMember(member *domain.RoomMember) error {

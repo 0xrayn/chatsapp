@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"chatapp/internal/domain"
 	"chatapp/internal/middleware"
@@ -310,10 +311,12 @@ func (h *RoomHandler) DeleteRoom(c *gin.Context) {
 
 type MessageHandler struct {
 	messageService *service.MessageService
+	roomRepo       domain.RoomRepository
+	hub            *ws.Hub
 }
 
-func NewMessageHandler(messageService *service.MessageService) *MessageHandler {
-	return &MessageHandler{messageService: messageService}
+func NewMessageHandler(messageService *service.MessageService, roomRepo domain.RoomRepository, hub *ws.Hub) *MessageHandler {
+	return &MessageHandler{messageService: messageService, roomRepo: roomRepo, hub: hub}
 }
 
 func (h *MessageHandler) GetMessages(c *gin.Context) {
@@ -337,7 +340,26 @@ func (h *MessageHandler) GetMessages(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, result)
+	// Include the partner's read_at so the client can mark old messages as read (blue ticks).
+	// We fetch all members and find the one that isn't the current user.
+	var partnerReadAt *time.Time
+	if members, err := h.roomRepo.GetMembers(roomID); err == nil {
+		for _, m := range members {
+			if m.UserID != userID {
+				partnerReadAt = m.ReadAt
+				break
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":             result.Data,
+		"total":            result.Total,
+		"page":             result.Page,
+		"limit":            result.Limit,
+		"total_pages":      result.TotalPages,
+		"partner_read_at":  partnerReadAt,
+	})
 }
 
 func (h *MessageHandler) EditMessage(c *gin.Context) {
@@ -359,6 +381,8 @@ func (h *MessageHandler) EditMessage(c *gin.Context) {
 		return
 	}
 
+	go h.broadcastToRoomMembers(message.RoomID, domain.EventEditMessage, message)
+
 	c.JSON(http.StatusOK, message)
 }
 
@@ -370,10 +394,39 @@ func (h *MessageHandler) DeleteMessage(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
+
+	// Fetch the message first so we know its room for broadcasting after deletion
+	roomID, err := h.messageService.GetMessageRoomID(msgID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Message not found"})
+		return
+	}
+
 	if err := h.messageService.DeleteMessage(msgID, userID); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 
+	go h.broadcastToRoomMembers(roomID, domain.EventDeleteMessage, gin.H{"id": msgID, "room_id": roomID})
+
 	c.JSON(http.StatusOK, gin.H{"message": "Message deleted successfully"})
+}
+
+func (h *MessageHandler) broadcastToRoomMembers(roomID uuid.UUID, eventType domain.WSEventType, payload interface{}) {
+	data, err := json.Marshal(map[string]interface{}{
+		"type":    string(eventType),
+		"payload": payload,
+	})
+	if err != nil {
+		return
+	}
+
+	members, err := h.roomRepo.GetMembers(roomID)
+	if err != nil {
+		return
+	}
+
+	for _, m := range members {
+		h.hub.SendToUser(m.UserID, data)
+	}
 }

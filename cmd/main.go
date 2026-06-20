@@ -65,7 +65,7 @@ func main() {
 	// Handlers
 	authHandler := handler.NewAuthHandler(authService, dmService, hub)
 	roomHandler := handler.NewRoomHandler(roomService)
-	msgHandler := handler.NewMessageHandler(msgService)
+	msgHandler := handler.NewMessageHandler(msgService, roomRepo, hub)
 	dmHandler := handler.NewDMHandler(dmService, hub)
 	uploadHandler := handler.NewUploadHandler()
 	wsHandler := ws.NewHandler(hub, msgRepo, roomRepo, userRepo)

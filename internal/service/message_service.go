@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"time"
 
 	"chatapp/internal/domain"
 
@@ -16,6 +17,9 @@ type MessageService struct {
 func NewMessageService(msgRepo domain.MessageRepository, roomRepo domain.RoomRepository) *MessageService {
 	return &MessageService{msgRepo: msgRepo, roomRepo: roomRepo}
 }
+
+// EditDeleteWindow is how long after sending a message can still be edited or deleted.
+const EditDeleteWindow = 3 * time.Minute
 
 func (s *MessageService) GetMessages(roomID, userID uuid.UUID, page, limit int) (*domain.PaginatedResponse, error) {
 	// Verify user is a member
@@ -57,6 +61,25 @@ func (s *MessageService) EditMessage(messageID, userID uuid.UUID, req domain.Edi
 		return nil, errors.New("cannot edit a deleted message")
 	}
 
+	if time.Since(message.CreatedAt) > EditDeleteWindow {
+		return nil, errors.New("messages can only be edited within 3 minutes of sending")
+	}
+
+	// Find the recipient (the other room member) and check whether they've
+	// already read past this message's timestamp — if so, editing is blocked
+	// so the sender can't silently change something the recipient has seen.
+	members, err := s.roomRepo.GetMembers(message.RoomID)
+	if err == nil {
+		for _, m := range members {
+			if m.UserID == userID {
+				continue
+			}
+			if m.ReadAt != nil && !m.ReadAt.Before(message.CreatedAt) {
+				return nil, errors.New("cannot edit a message the recipient has already read")
+			}
+		}
+	}
+
 	message.Content = req.Content
 	message.IsEdited = true
 
@@ -67,6 +90,16 @@ func (s *MessageService) EditMessage(messageID, userID uuid.UUID, req domain.Edi
 	return message, nil
 }
 
+// GetMessageRoomID returns the room ID a message belongs to (used by the
+// handler to broadcast a delete event after the message is removed).
+func (s *MessageService) GetMessageRoomID(messageID uuid.UUID) (uuid.UUID, error) {
+	message, err := s.msgRepo.FindByID(messageID)
+	if err != nil {
+		return uuid.Nil, errors.New("message not found")
+	}
+	return message.RoomID, nil
+}
+
 func (s *MessageService) DeleteMessage(messageID, userID uuid.UUID) error {
 	message, err := s.msgRepo.FindByID(messageID)
 	if err != nil {
@@ -75,6 +108,14 @@ func (s *MessageService) DeleteMessage(messageID, userID uuid.UUID) error {
 
 	if message.SenderID != userID {
 		return errors.New("you can only delete your own messages")
+	}
+
+	if message.IsDeleted {
+		return errors.New("message already deleted")
+	}
+
+	if time.Since(message.CreatedAt) > EditDeleteWindow {
+		return errors.New("messages can only be deleted within 3 minutes of sending")
 	}
 
 	return s.msgRepo.SoftDelete(messageID)

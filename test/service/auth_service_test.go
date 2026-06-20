@@ -133,7 +133,7 @@ func TestAuthService_Login(t *testing.T) {
 			Password: "wrongpassword",
 		})
 
-		assert.EqualError(t, err, "invalid email or password")
+		assert.EqualError(t, err, "invalid credentials")
 		userRepo.AssertExpectations(t)
 	})
 
@@ -148,7 +148,7 @@ func TestAuthService_Login(t *testing.T) {
 			Password: "password",
 		})
 
-		assert.EqualError(t, err, "invalid email or password")
+		assert.EqualError(t, err, "invalid credentials")
 		userRepo.AssertExpectations(t)
 	})
 }

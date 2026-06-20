@@ -66,22 +66,28 @@ func (s *AuthService) Register(req domain.RegisterRequest) (*domain.AuthResponse
 }
 
 func (s *AuthService) Login(req domain.LoginRequest) (*domain.AuthResponse, error) {
-	// Try email first, then username
-	user, err := s.userRepo.FindByEmail(req.Identifier)
+	if req.Email == "" && req.Username == "" {
+		return nil, errors.New("email or username is required")
+	}
+
+	var user *domain.User
+	var err error
+
+	if req.Email != "" {
+		user, err = s.userRepo.FindByEmail(req.Email)
+	} else {
+		user, err = s.userRepo.FindByUsername(req.Username)
+	}
+
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Try as username
-			user, err = s.userRepo.FindByUsername(req.Identifier)
-			if err != nil {
-				return nil, errors.New("invalid username/email or password")
-			}
-		} else {
-			return nil, err
+			return nil, errors.New("invalid credentials")
 		}
+		return nil, err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return nil, errors.New("invalid username/email or password")
+		return nil, errors.New("invalid credentials")
 	}
 
 	token, err := middleware.GenerateToken(user.ID, user.Username)
@@ -89,9 +95,7 @@ func (s *AuthService) Login(req domain.LoginRequest) (*domain.AuthResponse, erro
 		return nil, errors.New("failed to generate token")
 	}
 
-	// Update online status
 	s.userRepo.SetOnlineStatus(user.ID, true)
-
 	return &domain.AuthResponse{Token: token, User: *user}, nil
 }
 

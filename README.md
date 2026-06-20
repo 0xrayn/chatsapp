@@ -1,198 +1,262 @@
-# 💬 ChatApp — Real-time Chat with WebSocket
+# ChatApp
 
-A **production-ready** real-time chat application built with Go, featuring WebSocket connections, JWT authentication, room management, and PostgreSQL persistence.
+A real-time chat application built with Go. Supports WebSocket messaging, JWT authentication, room management, direct messages, and PostgreSQL persistence.
 
-## 🏗️ Architecture
+---
+
+## Docs
+
+The following screenshots highlight the main features of **ChatApp**, including authentication, real-time messaging, direct messaging, and user profile management.
+
+### Login
+
+![Login](docs/screenshots/login.jpg)
+
+The login page provides a secure authentication system using JWT. Users can sign in using their registered email and password. After successful authentication, a JWT access token is generated and used to authorize subsequent REST API and WebSocket requests. This page also serves as the entry point for new users through the registration feature.
+
+---
+
+### Dashboard
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+The dashboard is the primary interface for public and private room conversations. Users can browse available chat rooms, join discussions, send and receive messages in real time via WebSocket, view message history, monitor online user presence, and see typing indicators. The interface updates instantly without requiring page refreshes.
+
+---
+
+### Direct Message Dashboard
+
+![Direct Messages](docs/screenshots/dashboarddm.png)
+
+The Direct Message (DM) dashboard enables private one-on-one conversations between users. A dedicated DM room is automatically created for each unique user pair, ensuring messages remain private. Users can exchange messages in real time, view conversation history, reply to previous messages, and receive typing status updates similar to public chat rooms.
+
+---
+
+### Settings
+
+![Settings](docs/screenshots/settings.png)
+
+The settings page allows users to manage their account preferences and personal information. From this page, users can update their profile details, modify account settings, review authentication information, and configure application preferences. This centralized management interface improves usability while keeping account-related operations organized and secure.
+
+---
+
+## Project Structure
 
 ```
 chatapp/
 ├── cmd/
-│   └── main.go                 # Entry point, DI, graceful shutdown
+│   └── main.go                    # Entry point, dependency injection, graceful shutdown
 ├── internal/
 │   ├── domain/
-│   │   ├── models.go           # Entities: User, Room, Message, DTOs
-│   │   └── repository.go       # Repository interfaces
+│   │   ├── models.go              # Entities: User, Room, Message, DTOs
+│   │   └── repository.go          # Repository interfaces
 │   ├── database/
-│   │   └── postgres.go         # DB connection & auto-migration
+│   │   └── postgres.go            # DB connection and auto-migration
 │   ├── repository/
-│   │   ├── user_repository.go  # GORM implementations
-│   │   ├── room_repository.go  # incl. DM room queries
+│   │   ├── user_repository.go     # GORM implementations
+│   │   ├── room_repository.go     # Includes DM room queries
 │   │   └── message_repository.go
 │   ├── service/
-│   │   ├── auth_service.go     # Business logic: auth
-│   │   ├── room_service.go     # Business logic: rooms
-│   │   ├── message_service.go  # Business logic: messages
-│   │   └── dm_service.go        # Direct message logic
+│   │   ├── auth_service.go        # Auth business logic
+│   │   ├── room_service.go        # Room business logic
+│   │   ├── message_service.go     # Message business logic
+│   │   └── dm_service.go          # Direct message logic
 │   ├── handler/
-│   │   ├── handlers.go         # HTTP handlers (REST API)
-│   │   └── dm_handler.go       # DM endpoints
+│   │   ├── handlers.go            # HTTP handlers (REST API)
+│   │   └── dm_handler.go          # DM endpoints
 │   ├── middleware/
-│   │   ├── auth.go             # JWT middleware (header + query token)
-│   │   ├── rate_limiter.go     # Token-bucket rate limiting
-│   │   ├── logger.go           # Request ID, request logger, recovery
-│   │   └── validation.go       # Input validation helpers
+│   │   ├── auth.go                # JWT middleware (header + query token)
+│   │   ├── rate_limiter.go        # Token-bucket rate limiting
+│   │   ├── logger.go              # Request ID, request logger, recovery
+│   │   └── validation.go          # Input validation helpers
 │   ├── logger/
-│   │   └── logger.go           # zerolog setup
+│   │   └── logger.go              # zerolog setup
 │   ├── websocket/
-│   │   ├── hub.go              # Connection manager & broadcaster
-│   │   └── handler.go          # WS upgrade & event routing
+│   │   ├── hub.go                 # Connection manager and broadcaster
+│   │   └── handler.go             # WebSocket upgrade and event routing
 │   └── router/
-│       └── router.go           # Route definitions
+│       └── router.go              # Route definitions
 ├── static/
-│   └── index.html              # Interactive WebSocket test client
+│   └── index.html                 # Browser WebSocket client
 ├── test/
-│   ├── mock/                   # testify mocks for repositories
-│   └── service/                # unit tests (auth, room, message, DM)
-├── .github/workflows/ci.yml    # GitHub Actions CI
+│   ├── mock/                      # testify mocks for repositories
+│   └── service/                   # Unit tests: auth, room, message, DM
 ├── docker-compose.yml
 ├── Dockerfile
 └── Makefile
 ```
 
-## 🚀 Tech Stack
+---
 
-| Layer         | Technology               |
-|---------------|--------------------------|
-| Framework     | Gin                      |
-| WebSocket     | gorilla/websocket        |
-| ORM           | GORM                     |
-| Database      | PostgreSQL               |
-| Auth          | JWT (golang-jwt/jwt v5)  |
-| Password      | bcrypt                   |
-| UUID          | google/uuid              |
+## Tech Stack
 
-## ⚡ Quick Start
+| Layer       | Technology              |
+|-------------|-------------------------|
+| Framework   | Gin                     |
+| WebSocket   | gorilla/websocket       |
+| ORM         | GORM                    |
+| Database    | PostgreSQL              |
+| Auth        | JWT (golang-jwt/jwt v5) |
+| Password    | bcrypt                  |
+| UUID        | google/uuid             |
+| Logging     | zerolog                 |
 
-### 1. Clone & setup environment
+---
+
+## Quick Start
+
+**1. Clone and configure environment**
 ```bash
 cp .env.example .env
-# Edit .env with your DB credentials
-
-# Download dependencies (first time only)
+# Fill in your DB credentials and JWT secret in .env
 go mod tidy
 ```
 
-### 2. Start PostgreSQL (Docker)
+**2. Start PostgreSQL**
 ```bash
 make docker-up
 ```
 
-### 3. Run the app
+**3. Run the server**
 ```bash
 make run
 ```
 
-Server starts at `http://localhost:8080`
+Server runs at `http://localhost:8080`.
 
 ---
 
-## 📡 REST API Endpoints
+## REST API
 
 ### Auth
-| Method | Endpoint              | Description       | Auth |
-|--------|-----------------------|-------------------|------|
-| POST   | /api/v1/auth/register | Register new user | ❌   |
-| POST   | /api/v1/auth/login    | Login             | ❌   |
-| GET    | /api/v1/auth/me       | Get my profile    | ✅   |
+
+| Method | Endpoint                | Description        | Auth |
+|--------|-------------------------|--------------------|------|
+| POST   | /api/v1/auth/register   | Register new user  | No   |
+| POST   | /api/v1/auth/login      | Login              | No   |
+| GET    | /api/v1/auth/me         | Get current user   | Yes  |
 
 ### Rooms
-| Method | Endpoint                    | Description          | Auth |
-|--------|-----------------------------|----------------------|------|
-| GET    | /api/v1/rooms               | List public rooms    | ✅   |
-| POST   | /api/v1/rooms               | Create room          | ✅   |
-| GET    | /api/v1/rooms/me            | My joined rooms      | ✅   |
-| GET    | /api/v1/rooms/:id           | Get room detail      | ✅   |
-| DELETE | /api/v1/rooms/:id           | Delete room          | ✅   |
-| POST   | /api/v1/rooms/:id/join      | Join room            | ✅   |
-| POST   | /api/v1/rooms/:id/leave     | Leave room           | ✅   |
-| GET    | /api/v1/rooms/:id/messages | Get messages      | ✅   |
+
+| Method | Endpoint                       | Description          | Auth |
+|--------|--------------------------------|----------------------|------|
+| GET    | /api/v1/rooms                  | List public rooms    | Yes  |
+| POST   | /api/v1/rooms                  | Create room          | Yes  |
+| GET    | /api/v1/rooms/me               | My joined rooms      | Yes  |
+| GET    | /api/v1/rooms/:id              | Get room detail      | Yes  |
+| DELETE | /api/v1/rooms/:id              | Delete room          | Yes  |
+| POST   | /api/v1/rooms/:id/join         | Join room            | Yes  |
+| POST   | /api/v1/rooms/:id/leave        | Leave room           | Yes  |
+| GET    | /api/v1/rooms/:id/messages     | Get message history  | Yes  |
 
 ### Messages
-| Method | Endpoint              | Description    | Auth |
-|--------|-----------------------|----------------|------|
-| PATCH  | /api/v1/messages/:id  | Edit message   | ✅   |
-| DELETE | /api/v1/messages/:id  | Delete message | ✅   |
+
+| Method | Endpoint               | Description    | Auth |
+|--------|------------------------|----------------|------|
+| PATCH  | /api/v1/messages/:id   | Edit message   | Yes  |
+| DELETE | /api/v1/messages/:id   | Delete message | Yes  |
+
+### Direct Messages
+
+| Method | Endpoint    | Description                                          | Auth |
+|--------|-------------|------------------------------------------------------|------|
+| GET    | /api/v1/dm  | List my DM conversations                             | Yes  |
+| POST   | /api/v1/dm  | Get or create a DM room `{"recipient_id":"uuid"}`   | Yes  |
+
+Once you have the DM room ID, use it like any other room for WebSocket messaging and message history.
 
 ---
 
-## 🔌 WebSocket Protocol
+## WebSocket Protocol
 
-### Connect
+**Connect:**
 ```
 ws://localhost:8080/api/v1/ws
 Headers: Authorization: Bearer <jwt_token>
 ```
 
-### Events (Client → Server)
+**Client to server events:**
 
-**Join a room:**
+Join a room:
 ```json
 { "type": "join_room", "payload": { "room_id": "uuid" } }
 ```
 
-**Send a message:**
+Send a message:
 ```json
 {
   "type": "send_message",
   "payload": {
     "room_id": "uuid",
-    "content": "Hello world!",
+    "content": "Hello!",
     "reply_to_id": "uuid (optional)"
   }
 }
 ```
 
-**Typing indicator:**
+Typing indicator:
 ```json
 { "type": "typing", "payload": { "room_id": "uuid" } }
 { "type": "stop_typing", "payload": { "room_id": "uuid" } }
 ```
 
-**Leave room:**
+Leave room:
 ```json
 { "type": "leave_room", "payload": { "room_id": "uuid" } }
 ```
 
-**Ping/heartbeat:**
+Ping / heartbeat:
 ```json
 { "type": "ping" }
 ```
 
-### Events (Server → Client)
+**Server to client events:**
 
-| Event Type      | Description                        |
-|-----------------|------------------------------------|
-| `new_message`   | New message in room                |
-| `edit_message`  | Message was edited                 |
-| `delete_message`| Message was deleted                |
-| `user_joined`   | User joined the room               |
-| `user_left`     | User left the room                 |
-| `user_online`   | User came online                   |
-| `user_offline`  | User went offline                  |
-| `typing`        | User is typing                     |
-| `stop_typing`   | User stopped typing                |
-| `error`         | Error occurred                     |
-| `pong`          | Heartbeat response                 |
+| Event           | Description                    |
+|-----------------|--------------------------------|
+| new_message     | New message in room            |
+| edit_message    | Message was edited             |
+| delete_message  | Message was deleted            |
+| user_joined     | User joined the room           |
+| user_left       | User left the room             |
+| user_online     | User came online               |
+| user_offline    | User went offline              |
+| typing          | User is typing                 |
+| stop_typing     | User stopped typing            |
+| messages_read   | Partner read your messages     |
+| error           | Error occurred                 |
+| pong            | Heartbeat response             |
 
 ---
 
-## 🧪 Example API Usage
+## Edit and Delete Rules
 
-### Register
+Messages can only be edited or deleted if **both** conditions are met:
+
+1. The message was sent less than 3 minutes ago.
+2. The recipient has not yet read it (no blue double-tick).
+
+If either condition fails, the edit and delete options are hidden from the context menu. This is enforced on the frontend. The 3-minute window applies regardless of read status.
+
+---
+
+## Example API Usage
+
+Register:
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"username":"budi","email":"budi@example.com","password":"secret123"}'
 ```
 
-### Login
+Login:
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"budi@example.com","password":"secret123"}'
 ```
 
-### Create Room
+Create a room:
 ```bash
 curl -X POST http://localhost:8080/api/v1/rooms \
   -H "Authorization: Bearer <token>" \
@@ -200,7 +264,7 @@ curl -X POST http://localhost:8080/api/v1/rooms \
   -d '{"name":"General","description":"Main chat room","type":"public"}'
 ```
 
-### Get Messages
+Get messages:
 ```bash
 curl http://localhost:8080/api/v1/rooms/<room_id>/messages?page=1&limit=50 \
   -H "Authorization: Bearer <token>"
@@ -208,72 +272,56 @@ curl http://localhost:8080/api/v1/rooms/<room_id>/messages?page=1&limit=50 \
 
 ---
 
-## 🌟 Key Features
+## Features
 
-- **Real-time messaging** via WebSocket with gorilla/websocket
-- **Room-based chat** — public, private, direct message rooms
-- **Direct Messages (DM)** — 1-on-1 conversations, auto-created room per pair
-- **JWT Authentication** — stateless auth, 7-day token expiry
-- **Online presence** — track who's online in real-time
-- **Typing indicators** — broadcast typing status per room
-- **Message history** — paginated REST API for past messages
-- **Edit & soft-delete** messages — deleted content preserved in DB
-- **Reply to messages** — threaded conversation support
-- **Rate limiting** — token-bucket per IP, stricter on auth endpoints
-- **Structured logging** — zerolog, pretty console (dev) / JSON (prod)
-- **Graceful shutdown** — SIGINT/SIGTERM handling with 10s drain
-- **Unit tests** — service layer fully covered with mocked repositories
-- **WebSocket test client** — interactive HTML client at `/static/index.html`
-- **Clean Architecture** — domain → repository → service → handler layers
-- **Docker ready** — full docker-compose setup included
-- **CI pipeline** — GitHub Actions: vet, test, build, format check
-
----
-
-## 🧪 Testing
-
-```bash
-make test          # run all unit tests
-go test ./... -v -cover   # with coverage
-```
-
-Tests live in `test/service/*_test.go` and use `testify/mock` to mock
-repository interfaces — no database needed to run them.
+- Real-time messaging via WebSocket
+- Room-based chat: public, private, and direct message rooms
+- Direct Messages (DM): 1-on-1 conversations, auto-created room per pair
+- JWT authentication with 7-day token expiry
+- Online presence tracking in real-time
+- Typing indicators broadcast per room
+- Paginated message history via REST API
+- Edit and soft-delete messages (rules above)
+- Reply to messages for threaded conversations
+- Token-bucket rate limiting per IP
+- Structured logging with zerolog (pretty in dev, JSON in prod)
+- Graceful shutdown on SIGINT/SIGTERM with 10s drain
+- Unit tests for the service layer using mocked repositories
+- Browser WebSocket client included at `/static/index.html`
+- Clean architecture: domain > repository > service > handler
+- Docker Compose setup included
 
 ---
 
-## 🌐 WebSocket Test Client
+## Rate Limiting
 
-A ready-to-use browser client is included at:
-
-```
-http://localhost:8080/static/index.html
-```
-
-It lets you:
-1. Register / login to get a JWT
-2. Connect via WebSocket (token passed as `?token=` query param)
-3. Join a room, send messages, see typing indicators & presence events live
-
----
-
-## 🛡️ Rate Limiting
-
-| Endpoint group | Limit          |
-|-----------------|----------------|
-| `/api/v1/auth/*` | 10 requests/min per IP |
-| All other `/api/v1/*` | 120 requests/min per IP |
+| Endpoint group          | Limit                   |
+|-------------------------|-------------------------|
+| /api/v1/auth/*          | 10 requests/min per IP  |
+| All other /api/v1/*     | 120 requests/min per IP |
 
 Exceeding the limit returns `429 Too Many Requests`.
 
 ---
 
-## 💬 Direct Messages
+## Testing
 
-| Method | Endpoint    | Description                          | Auth |
-|--------|-------------|---------------------------------------|------|
-| GET    | /api/v1/dm  | List my DM conversations              | ✅   |
-| POST   | /api/v1/dm  | Get or create DM room with a user `{"recipient_id":"uuid"}` | ✅   |
+```bash
+make test
+# or with coverage
+go test ./... -v -cover
+```
 
-Once you have the DM room's ID, use it like any other room for
-WebSocket messaging and message history (`/api/v1/rooms/:id/messages`).
+Tests live in `test/service/` and use `testify/mock` to mock repository interfaces. No database is needed to run them.
+
+---
+
+## Browser Client
+
+A ready-to-use browser client is served at:
+
+```
+http://localhost:8080/static/index.html
+```
+
+It lets you register or login, connect via WebSocket, join rooms, send messages, and see typing indicators and presence events live.

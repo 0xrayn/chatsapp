@@ -836,6 +836,10 @@ function showMsgMenu(row,x,y){
   const m=row._raw;
   const ageMs=Date.now()-row._sentAt;
   const withinWindow=ageMs<3*60*1000;
+  // Block edit/delete if the partner has already read the message (blue double-tick)
+  const tick=row.querySelector('.btick');
+  const isRead=tick&&tick.classList.contains('blue');
+  const canModify=withinWindow&&!isRead;
 
   const menu=document.createElement('div');
   menu.className='msgmenu';
@@ -843,14 +847,16 @@ function showMsgMenu(row,x,y){
   menu.style.top=Math.min(y,window.innerHeight-110)+'px';
 
   let html='';
-  if(withinWindow&&m.type==='text'){
+  if(canModify&&m.type==='text'){
     html+=`<div class="msgmenu-item" id="mmEdit"><span>✏️</span>Edit</div>`;
-  } else if(withinWindow){
+  } else if(canModify){
     // file/image/audio: allow editing caption only if there's room (still just "Edit caption")
     html+=`<div class="msgmenu-item" id="mmEdit"><span>✏️</span>Edit caption</div>`;
   }
-  if(withinWindow){
+  if(canModify){
     html+=`<div class="msgmenu-item danger" id="mmDelete"><span>🗑️</span>Delete</div>`;
+  } else if(isRead){
+    html+=`<div class="msgmenu-hint">Cannot edit/delete after message is read</div>`;
   } else {
     html+=`<div class="msgmenu-hint">Can only edit/delete within 3 minutes</div>`;
   }

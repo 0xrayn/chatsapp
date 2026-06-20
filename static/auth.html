@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChatApp — Sign In</title>
+<title>ChatApp</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
 <script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js"></script>
@@ -61,7 +61,7 @@
 </div>
 
 <!-- RIGHT: Auth Form -->
-<div class="w-full md:w-[420px] flex-shrink-0 flex items-center justify-center p-6 relative overflow-y-auto" style="background:#080d1a;border-left:1px solid rgba(255,255,255,.05)">
+<div class="w-full md:w-[420px] flex-shrink-0 flex items-center justify-center p-6 relative overflow-hidden" style="background:#080d1a;border-left:1px solid rgba(255,255,255,.05)">
 
   <!-- Ambient glow -->
   <div class="absolute top-0 right-0 w-64 h-64 rounded-full pointer-events-none" style="background:radial-gradient(circle,rgba(245,158,11,.06) 0%,transparent 70%);transform:translate(30%,-30%)"></div>
@@ -101,7 +101,7 @@
           class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-sm font-medium" />
       </div>
       <button type="submit" class="btn-primary w-full py-3 rounded-xl text-sm font-bold tracking-wide mt-2">
-        Sign In →
+        Sign In
       </button>
       <div id="loginErr" class="text-red-400 text-xs text-center min-h-4 font-medium"></div>
     </form>
@@ -130,7 +130,7 @@
           class="input-field w-full pl-10 pr-4 py-3 rounded-xl text-sm font-medium" />
       </div>
       <button type="submit" class="btn-primary w-full py-3 rounded-xl text-sm font-bold tracking-wide mt-2">
-        Create Account →
+        Create Account
       </button>
       <div id="regErr" class="text-red-400 text-xs text-center min-h-4 font-medium"></div>
     </form>

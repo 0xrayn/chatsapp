@@ -203,3 +203,13 @@ type MarkReadRequest struct {
 type CreateDMRequest struct {
 	RecipientID string `json:"recipient_id" binding:"required"`
 }
+
+// TokenBlacklist stores invalidated JWT tokens until their natural expiry.
+// On logout, the token's JTI (unique claim ID) is inserted here.
+// AuthMiddleware checks this table before allowing any request.
+type TokenBlacklist struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement"`
+	JTI       string    `gorm:"uniqueIndex;not null"` // JWT ID claim
+	ExpiresAt time.Time `gorm:"index;not null"`       // same as token ExpiresAt — for cleanup
+	CreatedAt time.Time
+}

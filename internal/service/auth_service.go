@@ -8,17 +8,20 @@ import (
 	"chatapp/internal/domain"
 	"chatapp/internal/middleware"
 
+	"time"
+
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type AuthService struct {
-	userRepo domain.UserRepository
+	userRepo      domain.UserRepository
+	blacklistRepo domain.TokenBlacklistRepository
 }
 
-func NewAuthService(userRepo domain.UserRepository) *AuthService {
-	return &AuthService{userRepo: userRepo}
+func NewAuthService(userRepo domain.UserRepository, blacklistRepo domain.TokenBlacklistRepository) *AuthService {
+	return &AuthService{userRepo: userRepo, blacklistRepo: blacklistRepo}
 }
 
 func (s *AuthService) Register(req domain.RegisterRequest) (*domain.AuthResponse, error) {
@@ -218,4 +221,13 @@ func (s *AuthService) UpdatePassword(userID uuid.UUID, req domain.UpdatePassword
 	}
 
 	return nil
+}
+
+// Logout revokes the current JWT by adding its JTI to the blacklist.
+// The token will be rejected by AuthMiddleware on all subsequent requests.
+func (s *AuthService) Logout(jti string, expiresAt time.Time) error {
+	if jti == "" {
+		return nil // nothing to revoke
+	}
+	return s.blacklistRepo.Add(jti, expiresAt)
 }

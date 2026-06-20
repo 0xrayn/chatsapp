@@ -22,7 +22,6 @@ func NewMessageService(msgRepo domain.MessageRepository, roomRepo domain.RoomRep
 const EditDeleteWindow = 3 * time.Minute
 
 func (s *MessageService) GetMessages(roomID, userID uuid.UUID, page, limit int) (*domain.PaginatedResponse, error) {
-	// Verify user is a member
 	isMember, _ := s.roomRepo.IsMember(roomID, userID)
 	if !isMember {
 		return nil, errors.New("you are not a member of this room")
@@ -57,6 +56,13 @@ func (s *MessageService) EditMessage(messageID, userID uuid.UUID, req domain.Edi
 		return nil, errors.New("you can only edit your own messages")
 	}
 
+	// Verify sender is still a member of the room — prevents ex-members from
+	// editing messages they sent before leaving.
+	isMember, err := s.roomRepo.IsMember(message.RoomID, userID)
+	if err != nil || !isMember {
+		return nil, errors.New("you are not a member of this room")
+	}
+
 	if message.IsDeleted {
 		return nil, errors.New("cannot edit a deleted message")
 	}
@@ -65,9 +71,7 @@ func (s *MessageService) EditMessage(messageID, userID uuid.UUID, req domain.Edi
 		return nil, errors.New("messages can only be edited within 3 minutes of sending")
 	}
 
-	// Find the recipient (the other room member) and check whether they've
-	// already read past this message's timestamp — if so, editing is blocked
-	// so the sender can't silently change something the recipient has seen.
+	// Block editing if the recipient has already read this message.
 	members, err := s.roomRepo.GetMembers(message.RoomID)
 	if err == nil {
 		for _, m := range members {
@@ -110,6 +114,12 @@ func (s *MessageService) DeleteMessage(messageID, userID uuid.UUID) error {
 		return errors.New("you can only delete your own messages")
 	}
 
+	// Verify sender is still a member of the room.
+	isMember, err := s.roomRepo.IsMember(message.RoomID, userID)
+	if err != nil || !isMember {
+		return errors.New("you are not a member of this room")
+	}
+
 	if message.IsDeleted {
 		return errors.New("message already deleted")
 	}
@@ -118,9 +128,7 @@ func (s *MessageService) DeleteMessage(messageID, userID uuid.UUID) error {
 		return errors.New("messages can only be deleted within 3 minutes of sending")
 	}
 
-	// Block deletion once the recipient has already read the message —
-	// same rule as editing, so a sender can't retroactively remove
-	// something the other person has already seen.
+	// Block deletion once the recipient has already read the message.
 	members, err := s.roomRepo.GetMembers(message.RoomID)
 	if err == nil {
 		for _, m := range members {

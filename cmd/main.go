@@ -22,42 +22,58 @@ import (
 )
 
 func main() {
-	// Load .env
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file, using environment variables")
 	}
+
+	// Must be called before anything else — panics if JWT_SECRET is missing or weak.
+	middleware.MustLoadJWTSecret(os.Getenv("JWT_SECRET"))
 
 	env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "development"
 	}
 
-	// Init structured logger
 	applogger.Init(env)
 	applogger.Log.Info().Str("env", env).Msg("Starting ChatApp")
 
-	// Connect DB
 	db, err := database.NewPostgresDB()
 	if err != nil {
 		applogger.Log.Fatal().Err(err).Msg("Failed to connect database")
 	}
 
-	// Migrate
 	if err := database.AutoMigrate(db); err != nil {
 		applogger.Log.Fatal().Err(err).Msg("Failed to migrate database")
 	}
 
-	// Repos
+	// Repositories
 	userRepo := repository.NewUserRepository(db)
 	roomRepo := repository.NewRoomRepository(db)
 	msgRepo := repository.NewMessageRepository(db)
+	blacklistRepo := repository.NewTokenBlacklistRepository(db)
+
+	// Inject blacklist repo into auth middleware so it can reject revoked tokens.
+	middleware.SetBlacklistRepo(blacklistRepo)
+
+	// Periodically delete expired revoked tokens so the blacklist table doesn't grow forever.
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := blacklistRepo.DeleteExpired(); err != nil {
+				applogger.Log.Error().Err(err).Msg("Failed to clean expired tokens")
+			} else {
+				applogger.Log.Debug().Msg("Expired token blacklist entries cleaned")
+			}
+		}
+	}()
 
 	// WebSocket Hub
 	hub := ws.NewHub()
 	go hub.Run()
 
 	// Services
-	authService := service.NewAuthService(userRepo)
+	authService := service.NewAuthService(userRepo, blacklistRepo)
 	roomService := service.NewRoomService(roomRepo)
 	msgService := service.NewMessageService(msgRepo, roomRepo)
 	dmService := service.NewDMService(roomRepo, userRepo, msgRepo, hub)
@@ -74,7 +90,6 @@ func main() {
 	apiLimiter := middleware.NewAPIRateLimiter()
 	authLimiter := middleware.NewAuthRateLimiter()
 
-	// Setup router
 	r := router.SetupRoutes(router.Config{
 		AuthHandler:   authHandler,
 		RoomHandler:   roomHandler,
@@ -99,17 +114,13 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in goroutine
 	go func() {
-		applogger.Log.Info().
-			Str("addr", srv.Addr).
-			Msg("🚀 Server started")
+		applogger.Log.Info().Str("addr", srv.Addr).Msg("Server started")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			applogger.Log.Fatal().Err(err).Msg("Server error")
 		}
 	}()
 
-	// Graceful shutdown on SIGINT / SIGTERM
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
@@ -123,9 +134,8 @@ func main() {
 		applogger.Log.Error().Err(err).Msg("Server forced shutdown")
 	}
 
-	// Close DB
 	sqlDB, _ := db.DB()
 	sqlDB.Close()
 
-	applogger.Log.Info().Msg("✅ Server exited cleanly")
+	applogger.Log.Info().Msg("Server exited cleanly")
 }

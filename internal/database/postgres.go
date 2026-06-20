@@ -53,6 +53,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&domain.Room{},
 		&domain.RoomMember{},
 		&domain.Message{},
+		&domain.TokenBlacklist{},
 	)
 	if err != nil {
 		return fmt.Errorf("auto migration failed: %w", err)

@@ -4,7 +4,7 @@ A real-time chat application built with Go. Supports WebSocket messaging, JWT au
 
 ---
 
-## Docs
+## Screenshots
 
 The following screenshots highlight the main features of **ChatApp**, including authentication, real-time messaging, direct messaging, and user profile management.
 
@@ -37,7 +37,6 @@ The Direct Message (DM) dashboard enables private one-on-one conversations betwe
 ![Settings](docs/screenshots/settings.png)
 
 The settings page allows users to manage their account preferences and personal information. From this page, users can update their profile details, modify account settings, review authentication information, and configure application preferences. This centralized management interface improves usability while keeping account-related operations organized and secure.
-
 ---
 
 ## Project Structure
@@ -135,6 +134,7 @@ Server runs at `http://localhost:8080`.
 | POST   | /api/v1/auth/register   | Register new user  | No   |
 | POST   | /api/v1/auth/login      | Login              | No   |
 | GET    | /api/v1/auth/me         | Get current user   | Yes  |
+| POST   | /api/v1/auth/logout     | Logout (revoke token) | Yes  |
 
 ### Rooms
 
@@ -172,10 +172,33 @@ Once you have the DM room ID, use it like any other room for WebSocket messaging
 **Connect:**
 ```
 ws://localhost:8080/api/v1/ws
-Headers: Authorization: Bearer <jwt_token>
 ```
 
+Token authentication is done **after** the upgrade, not in the URL. Passing a token as a query parameter (`?token=...`) would expose it in server logs, browser history, and Referer headers.
+
+**Two supported auth flows:**
+
+Option A — Authorization header (non-browser / API clients):
+```
+ws://localhost:8080/api/v1/ws
+Header: Authorization: Bearer <jwt_token>
+```
+
+Option B — First-message auth (browser clients):
+```
+1. Connect without any token
+2. Server immediately sends: {"type":"auth_required"}
+3. Client replies:           {"type":"auth","payload":{"token":"<jwt>"}}
+4. Server validates and proceeds normally
+```
+If the first message is not a valid auth event, the connection is closed.
+
 **Client to server events:**
+
+Authenticate (only needed in browser flow — see above):
+```json
+{ "type": "auth", "payload": { "token": "<jwt>" } }
+```
 
 Join a room:
 ```json
@@ -284,6 +307,11 @@ curl http://localhost:8080/api/v1/rooms/<room_id>/messages?page=1&limit=50 \
 - Edit and soft-delete messages (rules above)
 - Reply to messages for threaded conversations
 - Token-bucket rate limiting per IP
+- File upload validated by extension AND magic-bytes MIME type (prevents disguised uploads)
+- WebSocket authentication via first-message handshake (token never exposed in URL or logs)
+- JWT revocation via token blacklist — logout immediately invalidates the token
+- CORS and WebSocket origins restricted to `ALLOWED_ORIGINS` env variable (no allow-all)
+- Edit and delete restricted to current room members (ex-members cannot modify old messages)
 - Structured logging with zerolog (pretty in dev, JSON in prod)
 - Graceful shutdown on SIGINT/SIGTERM with 10s drain
 - Unit tests for the service layer using mocked repositories

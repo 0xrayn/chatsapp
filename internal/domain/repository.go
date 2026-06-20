@@ -44,3 +44,9 @@ type MessageRepository interface {
 	GetLastMessage(roomID uuid.UUID) (*Message, error)
 	CountUnread(roomID, userID uuid.UUID, since *time.Time) (int64, error)
 }
+
+type TokenBlacklistRepository interface {
+	Add(jti string, expiresAt time.Time) error
+	IsRevoked(jti string) (bool, error)
+	DeleteExpired() error
+}

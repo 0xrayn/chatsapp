@@ -2,6 +2,8 @@ package websocket
 
 import (
 	"encoding/json"
+	"os"
+	"strings"
 	"log"
 	"net/http"
 	"time"
@@ -14,17 +16,44 @@ import (
 	gorillaws "github.com/gorilla/websocket"
 )
 
+// wsAllowedOrigins mirrors the ALLOWED_ORIGINS env used by the HTTP CORS middleware.
+func wsAllowedOrigins() map[string]bool {
+	raw := os.Getenv("ALLOWED_ORIGINS")
+	if raw == "" {
+		raw = "http://localhost:8080,http://localhost:3000"
+	}
+	origins := make(map[string]bool)
+	for _, o := range strings.Split(raw, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			origins[o] = true
+		}
+	}
+	return origins
+}
+
 var upgrader = gorillaws.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	// Only allow origins listed in ALLOWED_ORIGINS env variable.
+	// Prevents cross-site WebSocket hijacking from untrusted domains.
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins in dev; restrict in production
+		origin := r.Header.Get("Origin")
+		// Allow same-origin requests (no Origin header, e.g. server-to-server)
+		if origin == "" {
+			return true
+		}
+		return wsAllowedOrigins()[origin]
 	},
 }
 
 type IncomingMessage struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
+}
+
+type AuthPayload struct {
+	Token string `json:"token"`
 }
 
 type ChatPayload struct {
@@ -46,8 +75,8 @@ type JoinRoomPayload struct {
 }
 
 type Handler struct {
-	hub     *Hub
-	msgRepo domain.MessageRepository
+	hub      *Hub
+	msgRepo  domain.MessageRepository
 	roomRepo domain.RoomRepository
 	userRepo domain.UserRepository
 }
@@ -62,14 +91,79 @@ func NewHandler(hub *Hub, msgRepo domain.MessageRepository, roomRepo domain.Room
 }
 
 func (h *Handler) HandleWS(c *gin.Context) {
-	userID := middleware.GetUserID(c)
-	username := middleware.GetUsername(c)
-
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("WebSocket upgrade failed: %v", err)
 		return
 	}
+
+	// --- Token authentication ---
+	// We do NOT read the token from the URL (?token=...) because query params
+	// are written to server logs, browser history, and Referer headers.
+	//
+	// Two supported paths:
+	//   1. Authorization header was already validated by WSAuthMiddleware (non-browser clients).
+	//   2. ws_pending_auth flag is set → client must send {"type":"auth","payload":{"token":"<jwt>"}}
+	//      as the very first WebSocket message before anything else is processed.
+
+	var userID uuid.UUID
+	var username string
+
+	pendingAuth, _ := c.Get("ws_pending_auth")
+	if pendingAuth == true {
+		// Ask the client to authenticate via first message
+		authRequiredMsg, _ := json.Marshal(map[string]string{"type": "auth_required"})
+		conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		conn.WriteMessage(gorillaws.TextMessage, authRequiredMsg)
+
+		// Wait for the auth message (10 s timeout)
+		conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+		_, rawMsg, err := conn.ReadMessage()
+		if err != nil {
+			conn.Close()
+			return
+		}
+
+		var msg IncomingMessage
+		if err := json.Unmarshal(rawMsg, &msg); err != nil || msg.Type != "auth" {
+			errMsg, _ := json.Marshal(map[string]interface{}{"type": "error", "payload": map[string]string{"error": "First message must be auth"}})
+			conn.WriteMessage(gorillaws.TextMessage, errMsg)
+			conn.Close()
+			return
+		}
+
+		var ap AuthPayload
+		if err := json.Unmarshal(msg.Payload, &ap); err != nil || ap.Token == "" {
+			errMsg, _ := json.Marshal(map[string]interface{}{"type": "error", "payload": map[string]string{"error": "Invalid auth payload"}})
+			conn.WriteMessage(gorillaws.TextMessage, errMsg)
+			conn.Close()
+			return
+		}
+
+		claims, err := middleware.ParseToken(ap.Token)
+		if err != nil {
+			errMsg, _ := json.Marshal(map[string]interface{}{"type": "error", "payload": map[string]string{"error": "Invalid or expired token"}})
+			conn.WriteMessage(gorillaws.TextMessage, errMsg)
+			conn.Close()
+			return
+		}
+
+		userID = claims.UserID
+		username = claims.Username
+	} else {
+		// Token was validated by WSAuthMiddleware via Authorization header
+		uid, exists := c.Get("user_id")
+		if !exists {
+			conn.Close()
+			return
+		}
+		userID = uid.(uuid.UUID)
+		username = c.MustGet("username").(string)
+	}
+
+	// Reset deadlines after successful auth
+	conn.SetReadDeadline(time.Time{})
+	conn.SetWriteDeadline(time.Time{})
 
 	client := &Client{
 		ID:       uuid.New(),
@@ -81,38 +175,27 @@ func (h *Handler) HandleWS(c *gin.Context) {
 		Hub:      h.hub,
 	}
 
-	// Register synchronously: JoinRoom below requires the client to already
-	// exist in the hub's client map, which an async channel send cannot guarantee.
 	h.hub.RegisterClient(client)
 
-	// Auto-join every room this user belongs to, so message broadcasts
-	// reach them even if they haven't explicitly opened that conversation.
+	// Auto-join every room this user belongs to
 	if rooms, err := h.roomRepo.FindByUserID(userID); err == nil {
 		for _, room := range rooms {
 			h.hub.JoinRoom(client.ID, room.ID)
 		}
 	}
 
-	// Update online status
 	go h.userRepo.SetOnlineStatus(userID, true)
-
-	// Notify others this user is online
 	go h.broadcastUserStatus(userID, username, string(domain.EventUserOnline))
-
-	// Start write pump in a goroutine
 	go client.WritePump()
 
-	// Send welcome event
 	client.SendEvent(string(domain.EventUserOnline), gin.H{
 		"user_id":  userID,
 		"username": username,
 		"message":  "Connected to chat server",
 	})
 
-	// Read pump (blocks until connection closes)
 	h.readPump(client)
 
-	// Cleanup on disconnect
 	h.hub.Unregister <- client
 	h.userRepo.SetOnlineStatus(userID, false)
 	h.broadcastUserStatus(userID, username, string(domain.EventUserOffline))
@@ -177,7 +260,6 @@ func (h *Handler) handleJoinRoom(client *Client, payload json.RawMessage) {
 		return
 	}
 
-	// Check membership
 	isMember, err := h.roomRepo.IsMember(roomID, client.UserID)
 	if err != nil || !isMember {
 		client.SendEvent(string(domain.EventError), gin.H{"error": "You are not a member of this room"})
@@ -186,7 +268,6 @@ func (h *Handler) handleJoinRoom(client *Client, payload json.RawMessage) {
 
 	h.hub.JoinRoom(client.ID, roomID)
 
-	// Notify room members
 	h.broadcastToRoom(roomID, client.ID, string(domain.EventUserJoined), gin.H{
 		"user_id":  client.UserID,
 		"username": client.Username,
@@ -230,7 +311,6 @@ func (h *Handler) handleSendMessage(client *Client, payload json.RawMessage) {
 		msgType = domain.MessageType(p.Type)
 	}
 
-	// Text messages require content; file/image/audio messages require a file URL
 	if msgType == domain.MessageTypeText {
 		if p.Content == "" || len(p.Content) > 2000 {
 			client.SendEvent(string(domain.EventError), gin.H{"error": "Message content must be 1-2000 characters"})
@@ -253,7 +333,6 @@ func (h *Handler) handleSendMessage(client *Client, payload json.RawMessage) {
 		return
 	}
 
-	// Verify membership
 	isMember, _ := h.roomRepo.IsMember(roomID, client.UserID)
 	if !isMember {
 		client.SendEvent(string(domain.EventError), gin.H{"error": "Not a room member"})
@@ -285,7 +364,6 @@ func (h *Handler) handleSendMessage(client *Client, payload json.RawMessage) {
 
 	go h.roomRepo.TouchLastMessageAt(roomID)
 
-	// Load sender info
 	savedMsg, _ := h.msgRepo.FindByID(message.ID)
 	if savedMsg == nil {
 		savedMsg = message
@@ -327,20 +405,12 @@ func (h *Handler) broadcastToRoom(roomID, excludeClientID uuid.UUID, eventType s
 		return
 	}
 
-	// Fetch actual room members from DB so delivery is guaranteed regardless
-	// of whether each client has explicitly "joined" the room in the WS hub.
-	// This eliminates the race condition between registration and auto-join
-	// that previously caused messages to silently not arrive.
 	members, err := h.roomRepo.GetMembers(roomID)
 	if err != nil {
 		return
 	}
 
 	for _, member := range members {
-		// Exclude the client identified by excludeClientID (used for typing events
-		// so you don't see your own "is typing" indicator) — but for new_message
-		// we pass uuid.Nil so all members including the sender receive it
-		// (sender needs it to confirm delivery and get the DB-assigned timestamp).
 		if excludeClientID != uuid.Nil && h.hub.ClientIDForUser(member.UserID) == excludeClientID {
 			continue
 		}
@@ -349,7 +419,6 @@ func (h *Handler) broadcastToRoom(roomID, excludeClientID uuid.UUID, eventType s
 }
 
 func (h *Handler) broadcastUserStatus(userID uuid.UUID, username, eventType string) {
-	// Broadcast to all connected clients
 	data, _ := json.Marshal(map[string]interface{}{
 		"type": eventType,
 		"payload": gin.H{

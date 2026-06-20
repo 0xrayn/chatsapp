@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"time"
 	"net/http"
 	"strconv"
 	"time"
@@ -53,6 +54,25 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	jti, _ := c.Get("token_jti")
+	exp, _ := c.Get("token_exp")
+
+	jtiStr, _ := jti.(string)
+	expTime, ok := exp.(time.Time)
+	if !ok {
+		expTime = time.Now().Add(7 * 24 * time.Hour)
+	}
+
+	if err := h.authService.Logout(jtiStr, expTime); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Logout failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
 func (h *AuthHandler) GetProfile(c *gin.Context) {

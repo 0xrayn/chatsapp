@@ -348,42 +348,6 @@ button,input,textarea{font-family:inherit}
 
 <div id="toasts"></div>
 
-<!-- ======= AUTH ======= -->
-<div id="authScreen">
-  <div class="auth-left">
-    <spline-viewer id="splineViewer" url="https://prod.spline.design/kZDDjO5HuC9UGAHT/scene.splinecode" events-target="local"></spline-viewer>
-    <div class="auth-left-overlay">
-      <div class="auth-left-tagline">Chat. Connect.<br>Be Present.</div>
-      <div class="auth-left-sub">Real-time messaging with style</div>
-    </div>
-  </div>
-  <div class="auth-right">
-    <div class="auth-card">
-      <div class="auth-logo">
-        <span class="auth-logo-icon">💬</span>
-        <h1>ChatApp</h1>
-        <p>Connect with anyone, anywhere</p>
-      </div>
-      <div class="auth-tabs">
-        <button id="tabLogin" class="active">Login</button>
-        <button id="tabReg">Register</button>
-      </div>
-      <form id="loginForm" class="aform">
-        <div class="afield"><span class="fi">✉️</span><input id="loginEmail" type="email" placeholder="Email" autocomplete="username"/></div>
-        <div class="afield"><span class="fi">🔒</span><input id="loginPw" type="password" placeholder="Password" autocomplete="current-password"/></div>
-        <button type="submit" class="asub">Login</button>
-      </form>
-      <form id="regForm" class="aform" style="display:none">
-        <div class="afield"><span class="fi">👤</span><input id="regUser" placeholder="Username" autocomplete="username"/></div>
-        <div class="afield"><span class="fi">✉️</span><input id="regEmail" type="email" placeholder="Email" autocomplete="email"/></div>
-        <div class="afield"><span class="fi">🔒</span><input id="regPw" type="password" placeholder="Password (min 6, 1 letter+1 number)" autocomplete="new-password"/></div>
-        <button type="submit" class="asub">Create Account</button>
-      </form>
-      <div class="aerr" id="authErr"></div>
-    </div>
-  </div>
-</div>
-
 <!-- ======= SETTINGS OVERLAY ======= -->
 <div class="ov" id="settOv">
   <div class="mc" style="width:400px">
@@ -650,8 +614,7 @@ async function api(path,opts={}){const r=await fetch(`${API}/api/v1${path}`,{...
 function toast(title,body,onClick,avUser){const el=document.createElement('div');el.style.cssText='background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:7px 9px;display:flex;align-items:center;gap:7px;box-shadow:var(--shadow);cursor:pointer;font-size:11.5px;animation:popIn .18s ease';el.innerHTML=`<div class="av sm">${avHtml(avUser||{username:title})}</div><div><div style="font-weight:700;margin-bottom:1px">${esc(title)}</div><div style="color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${esc(body)}</div></div>`;el.onclick=()=>{onClick&&onClick();el.remove()};$('toasts').appendChild(el);setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .2s';setTimeout(()=>el.remove(),200)},4500)}
 
 // ======= AUTH =======
-$('tabLogin').onclick=()=>{$('tabLogin').classList.add('active');$('tabReg').classList.remove('active');$('loginForm').style.display='flex';$('regForm').style.display='none'};
-$('tabReg').onclick=()=>{$('tabReg').classList.add('active');$('tabLogin').classList.remove('active');$('regForm').style.display='flex';$('loginForm').style.display='none'};
+
 // Start the app — token already loaded from localStorage above
 window.addEventListener('DOMContentLoaded', () => {
   if (token && me) {

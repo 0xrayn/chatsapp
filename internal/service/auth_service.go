@@ -8,8 +8,6 @@ import (
 	"chatapp/internal/domain"
 	"chatapp/internal/middleware"
 
-	"time"
-
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"

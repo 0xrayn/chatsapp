@@ -709,7 +709,25 @@ $('backBtn').onclick=closeChat;
 async function markRead(rid){try{await api(`/rooms/${rid}/read`,{method:'POST'});const c=convs.find(x=>x.room_id===rid);if(c)c.unread=0;renderConvs()}catch(e){}}
 
 // ======= WEBSOCKET =======
-function connectWS(){const base=API.replace(/^http/,'ws');ws=new WebSocket(`${base}/api/v1/ws?token=${token}`);ws.onopen=()=>{if(curRoom)send('join_room',{room_id:curRoom})};ws.onclose=()=>setTimeout(()=>{if(token)connectWS()},2000);ws.onmessage=e=>handleWS(JSON.parse(e.data))}
+function connectWS(){
+  const base=API.replace(/^http/,'ws');
+  ws=new WebSocket(`${base}/api/v1/ws`);
+  ws.onopen=()=>{
+    ws.send(JSON.stringify({type:'auth',payload:{token:token}}));
+  };
+  ws.onmessage=e=>{
+    const d=JSON.parse(e.data);
+    if(d.type==='auth_required'){
+      ws.send(JSON.stringify({type:'auth',payload:{token:token}}));
+      return;
+    }
+    if(d.type==='auth_ok'||d.type==='user_online'){
+      if(curRoom)send('join_room',{room_id:curRoom});
+    }
+    handleWS(d);
+  };
+  ws.onclose=()=>setTimeout(()=>{if(token)connectWS()},2000);
+}
 function send(type,payload){if(ws&&ws.readyState===1)ws.send(JSON.stringify({type,payload}))}
 function handleWS(d){
   switch(d.type){

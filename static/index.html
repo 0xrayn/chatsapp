@@ -725,31 +725,45 @@ function handleWS(d){
     case 'dm_created':{const s=d.payload.sender;loadConvs().then(()=>{toast(s.username,'started a conversation',()=>{const c=convs.find(c=>c.otherUser.id===s.id);if(c)openConv(c.room_id,c.name,c.otherUser.id)},s)});break}
     case 'edit_message':{
       const m=d.payload;
-      if(m.room_id!==curRoom)break;
-      const row=document.querySelector(`.mrow[data-msg-id="${m.id}"]`);
-      if(row){
-        row._raw=m;
-        const bbl=row.querySelector('.bbl');
-        const txt=bbl.querySelector('.btxt');
-        if(txt)txt.textContent=m.content;
-        const metaEl=bbl.querySelector('.bmeta');
-        if(metaEl&&!metaEl.querySelector('.bedited')){
-          const tag=document.createElement('span');tag.className='bedited';tag.textContent='edited';
-          metaEl.insertBefore(tag,metaEl.firstChild);
-        }
-        anime({targets:bbl,backgroundColor:[row._mine?'rgba(245,158,11,.25)':'rgba(255,255,255,.08)',null],duration:600,easing:'easeOutQuad'});
-      }
-      // also refresh sidebar preview if this was the last message
+      // Always refresh the sidebar preview if this edited message is the
+      // room's last message — previously skipped when the room wasn't open.
       let conv=convs.find(c=>c.room_id===m.room_id);
-      if(conv&&conv.lastMsg&&conv.lastMsg.id===m.id){conv.lastMsg=m;renderConvs()}
+      if(conv&&conv.lastMsg&&conv.lastMsg.id===m.id){
+        conv.lastMsg=m;
+        renderConvs();
+      }
+      // Update the message bubble in the DOM only if that room is currently open
+      if(m.room_id===curRoom){
+        const row=document.querySelector(`.mrow[data-msg-id="${m.id}"]`);
+        if(row){
+          row._raw=m;
+          const bbl=row.querySelector('.bbl');
+          const txt=bbl.querySelector('.btxt');
+          if(txt)txt.textContent=m.content;
+          const metaEl=bbl.querySelector('.bmeta');
+          if(metaEl&&!metaEl.querySelector('.bedited')){
+            const tag=document.createElement('span');tag.className='bedited';tag.textContent='edited';
+            metaEl.insertBefore(tag,metaEl.firstChild);
+          }
+          anime({targets:bbl,backgroundColor:[row._mine?'rgba(245,158,11,.25)':'rgba(255,255,255,.08)',null],duration:600,easing:'easeOutQuad'});
+        }
+      }
       break}
     case 'delete_message':{
       const p=d.payload;
-      if(p.room_id!==curRoom)break;
-      const row=document.querySelector(`.mrow[data-msg-id="${p.id}"]`);
-      if(row)animateMessageDeletion(row);
+      // Always update the sidebar preview, regardless of which conversation
+      // is currently open — previously this was skipped if the deleted
+      // message's room wasn't the active one, leaving stale previews.
       let conv=convs.find(c=>c.room_id===p.room_id);
-      if(conv&&conv.lastMsg&&conv.lastMsg.id===p.id){conv.lastMsg={...conv.lastMsg,content:'',type:'text',is_deleted:true};renderConvs()}
+      if(conv&&conv.lastMsg&&conv.lastMsg.id===p.id){
+        conv.lastMsg={...conv.lastMsg,content:'',type:'text',is_deleted:true};
+        renderConvs();
+      }
+      // Update the message bubble in the DOM only if that room is currently open
+      if(p.room_id===curRoom){
+        const row=document.querySelector(`.mrow[data-msg-id="${p.id}"]`);
+        if(row&&!row._raw.is_deleted)animateMessageDeletion(row);
+      }
       break}
     case 'messages_read':
       // Fix: only mark blue if the room matches AND it's the other user who read it

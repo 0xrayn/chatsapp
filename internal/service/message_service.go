@@ -118,5 +118,20 @@ func (s *MessageService) DeleteMessage(messageID, userID uuid.UUID) error {
 		return errors.New("messages can only be deleted within 3 minutes of sending")
 	}
 
+	// Block deletion once the recipient has already read the message —
+	// same rule as editing, so a sender can't retroactively remove
+	// something the other person has already seen.
+	members, err := s.roomRepo.GetMembers(message.RoomID)
+	if err == nil {
+		for _, m := range members {
+			if m.UserID == userID {
+				continue
+			}
+			if m.ReadAt != nil && !m.ReadAt.Before(message.CreatedAt) {
+				return errors.New("cannot delete a message the recipient has already read")
+			}
+		}
+	}
+
 	return s.msgRepo.SoftDelete(messageID)
 }

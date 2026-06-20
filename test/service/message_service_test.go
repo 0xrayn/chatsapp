@@ -212,16 +212,21 @@ func TestMessageService_EditMessage(t *testing.T) {
 }
 
 func TestMessageService_DeleteMessage(t *testing.T) {
-	t.Run("success within window", func(t *testing.T) {
+	t.Run("success within window and unread", func(t *testing.T) {
 		msgRepo := new(mock.MessageRepository)
 		roomRepo := new(mock.RoomRepository)
 		svc := service.NewMessageService(msgRepo, roomRepo)
 
 		msgID := uuid.New()
 		userID := uuid.New()
+		roomID := uuid.New()
 
-		existing := &domain.Message{ID: msgID, SenderID: userID, CreatedAt: time.Now().Add(-1 * time.Minute)}
+		existing := &domain.Message{ID: msgID, RoomID: roomID, SenderID: userID, CreatedAt: time.Now().Add(-1 * time.Minute)}
 		msgRepo.On("FindByID", msgID).Return(existing, nil)
+		roomRepo.On("GetMembers", roomID).Return([]domain.RoomMember{
+			{UserID: userID},
+			{UserID: uuid.New(), ReadAt: nil},
+		}, nil)
 		msgRepo.On("SoftDelete", msgID).Return(nil)
 
 		err := svc.DeleteMessage(msgID, userID)
@@ -279,6 +284,31 @@ func TestMessageService_DeleteMessage(t *testing.T) {
 		err := svc.DeleteMessage(msgID, userID)
 
 		assert.EqualError(t, err, "message already deleted")
+		msgRepo.AssertNotCalled(t, "SoftDelete")
+	})
+
+	t.Run("rejects deleting once recipient has read it", func(t *testing.T) {
+		msgRepo := new(mock.MessageRepository)
+		roomRepo := new(mock.RoomRepository)
+		svc := service.NewMessageService(msgRepo, roomRepo)
+
+		msgID := uuid.New()
+		userID := uuid.New()
+		recipientID := uuid.New()
+		roomID := uuid.New()
+		sentAt := time.Now().Add(-30 * time.Second)
+		readAt := time.Now().Add(-10 * time.Second)
+
+		existing := &domain.Message{ID: msgID, RoomID: roomID, SenderID: userID, CreatedAt: sentAt}
+		msgRepo.On("FindByID", msgID).Return(existing, nil)
+		roomRepo.On("GetMembers", roomID).Return([]domain.RoomMember{
+			{UserID: userID},
+			{UserID: recipientID, ReadAt: &readAt},
+		}, nil)
+
+		err := svc.DeleteMessage(msgID, userID)
+
+		assert.EqualError(t, err, "cannot delete a message the recipient has already read")
 		msgRepo.AssertNotCalled(t, "SoftDelete")
 	})
 }

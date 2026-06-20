@@ -40,14 +40,18 @@ func (r *messageRepository) FindByRoomID(roomID uuid.UUID, page, limit int) ([]d
 
 	offset := (page - 1) * limit
 
+	// Include soft-deleted messages: the client renders them as a
+	// "This message was deleted" placeholder so both participants see a
+	// consistent view, instead of the message silently vanishing for
+	// whichever side reloads history after the other side deleted it.
 	r.db.Model(&domain.Message{}).
-		Where("room_id = ? AND is_deleted = ?", roomID, false).
+		Where("room_id = ?", roomID).
 		Count(&total)
 
 	err := r.db.
 		Preload("Sender").
 		Preload("ReplyTo.Sender").
-		Where("room_id = ? AND is_deleted = ?", roomID, false).
+		Where("room_id = ?", roomID).
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(limit).
@@ -70,15 +74,22 @@ func (r *messageRepository) SoftDelete(id uuid.UUID) error {
 		Where("id = ?", id).
 		Updates(map[string]interface{}{
 			"is_deleted": true,
-			"content":    "This message has been deleted",
+			"content":    "",
+			"type":       domain.MessageTypeText,
+			"file_url":   "",
+			"file_name":  "",
+			"file_size":  0,
 		}).Error
 }
 
 func (r *messageRepository) GetLastMessage(roomID uuid.UUID) (*domain.Message, error) {
 	var message domain.Message
+	// Include soft-deleted messages: if the most recent message was deleted,
+	// the sidebar should show "Message deleted" rather than silently
+	// falling back to an older message.
 	err := r.db.
 		Preload("Sender").
-		Where("room_id = ? AND is_deleted = ?", roomID, false).
+		Where("room_id = ?", roomID).
 		Order("created_at DESC").
 		First(&message).Error
 	if err != nil {
